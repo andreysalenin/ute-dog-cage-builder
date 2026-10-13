@@ -45,6 +45,44 @@ const SCENARIOS = {
     await page.selectOption('#divider', 'perforated');
     await page.click('#rows-inc');
   },
+  alu_shared3_fit: async (page) => {
+    await page.click('[data-mat="frameMat"] button[data-v="aluminium"]');
+    await page.click('[data-mat="sheetMat"] button[data-v="aluminium"]');
+    await page.click('#rows-inc');
+    await page.selectOption('#rowJoin', 'shared');
+    await page.fill('#trayLength', '2400'); await page.dispatchEvent('#trayLength', 'change');
+    await page.waitForTimeout(400);
+    await page.click('#fit');
+    await page.check('#v-ute');
+  },
+  sandwich_perf3: async (page) => {
+    await page.click('#rows-inc');
+    await page.selectOption('#rowJoin', 'sandwich');
+    await page.selectOption('#wallFront', 'perforated');
+  },
+  shared2_mixed_black: async (page) => {
+    await page.selectOption('#frameKind', 'black');
+    await page.click('[data-mat="sheetMat"] button[data-v="aluminium"]');
+    await page.selectOption('#rowJoin', 'shared2');
+    await page.selectOption('#divider', 'perforated');
+  },
+  stainless_fit_tray: async (page) => {
+    await page.selectOption('#frameKind', 'ss316');
+    await page.selectOption('#sheetKind', 'ss304');
+    await page.selectOption('#floorType', 'tread');
+    await page.click('#lock-cages');
+    await page.fill('#depth', '640'); await page.dispatchEvent('#depth', 'change');
+    await page.waitForTimeout(400);
+    await page.click('#fit');
+    await page.check('#v-doors');
+  },
+  shared_mesh_hinges: async (page) => {
+    await page.click('#rows-inc');
+    await page.selectOption('#rowJoin', 'shared');
+    await page.selectOption('#wallMiddle', 'mesh');
+    await page.click('#hinge-grid button[data-row="1"][data-side="L"][data-v="front"]');
+    await page.click('#hinge-grid button[data-row="0"][data-side="R"][data-v="front"]');
+  },
   six_rows_small: async (page) => {
     await page.evaluate(() => {
       const c = window.__cage; Object.assign(c.params, { rows: 6, shs: 20, shsT: 1.6, stockLength: 3000, height: 650, depth: 500 });
@@ -80,6 +118,7 @@ const SCENARIOS = {
       params: window.__cage.params, parts: window.__cage.model.parts.length,
       total: window.__cage.summary.total, warnings: window.__cage.summary.warnings,
       figs: document.getElementById('figs').innerText, pdfLabel: document.getElementById('dl-pdf').innerText,
+      status: document.getElementById('status').textContent, fitNote: document.getElementById('fit-note').textContent, joinNote: document.getElementById('join-note').textContent, matNote: document.getElementById('mat-note').textContent,
     }));
     fs.writeFileSync(path.join(dir, 'info.json'), JSON.stringify(info, null, 1));
     // STEP
@@ -94,6 +133,7 @@ const SCENARIOS = {
     const status = await page.textContent('#status');
     await page.screenshot({ path: path.join(dir, 'page_after.png') });
     console.log(`${name}: parts ${info.parts}, ${info.total.toFixed(1)} kg, step ${stepName}, pdf ${pdfName} (${((Date.now() - t1) / 1000).toFixed(1)} s), status "${status}", total ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+    console.log(`  before downloads: "${info.status}" | ${info.fitNote} | ${info.matNote}`);
     if (logs.length) console.log('  console:\n  ' + logs.join('\n  '));
     await ctx.close();
   }

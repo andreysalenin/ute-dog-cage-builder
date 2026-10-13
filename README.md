@@ -2,7 +2,7 @@
 
 **Live page: https://andreysalenin.github.io/ute-dog-cage-builder/**
 
-A one-page tool for designing welded dog cages that sit on a ute tray: rows of two dogs side by side (an N x 2 layout), with a mesh door at each end. Change the settings and the 3D model, cut list and weights update straight away. Then save:
+A one-page tool for designing welded dog cages that sit on a ute tray: rows of two dogs side by side (an N x 2 layout), with a mesh door at each end. Change the settings and the 3D model, cut list and weights update straight away. The 3D view can also show the tray and a generic ute under the cages. Then save:
 
 - **Drawings**: an A3 PDF set. It is normally 5 sheets (overview, general arrangement, module frame, doors, details and panels, cut list and stock), with a 6th sheet for cutting plans on long sets.
 - **3D model**: a STEP (AP214) assembly for CAD, one part per member, sheet, door and fitting.
@@ -11,11 +11,13 @@ Everything runs in the browser and nothing is uploaded. The page is a single sel
 
 ## What you can change
 
-- **Layout**: 1 to 6 rows, overall width, row depth, height, and the tray size for the fit check.
+- **Layout**: 1 to 6 rows, overall width, row depth and height, and the tray width and length. Lock either the cages or the tray, then **Fit** sizes the other set to match it (cages to fill the tray, or a tray to suit the cages).
 - **Doors**: front or rear hinge for each door, and the gap round each door.
 - **Walls**: solid sheet, sheet with air holes or weldmesh for the cab and tailgate faces and between rows, plus a solid or perforated divider and the air-hole size and spacing.
-- **Materials**: steel or aluminium, chosen separately for the SHS frame and the sheets. With mixed metals the sheets are riveted rather than welded.
+- **How rows join**: separate frames with a wall each (rows bolt together), separate frames with one sheet clamped between them, or one shared frame with a wall on each side of the shared SHS or a single wall on its centre line. A shared frame saves one SHS width per joint.
+- **Materials**: steel or aluminium, chosen separately for the SHS frame and the sheets, each with a grade: pre-galv, black (to powder coat), galvanised after fabrication or stainless 304/316 steel; 6061-T6, 6082-T6 or 6060-T5 aluminium SHS; galvanised, Zincanneal, black or stainless steel sheet; 5052-H32, 5005-H34 or 5083-H321 aluminium sheet. The floor can be plain sheet or tread plate. Switching to aluminium sets the usual aluminium sizes (40 x 40 x 2.0 SHS, 2.0 sheet, 3.0 tread-plate floor), and switching back restores your steel sizes. With mixed metals the sheets are riveted rather than welded.
 - **Sizes and mounting**: SHS section, sheet thicknesses, floor joists, roof bars, mesh, tray and join bolts, and stock bar and sheet sizes.
+- **3D view**: show or hide the roof, open the doors, pull the rows apart, colour the frame by cut-list mark, and show the tray and a ute (single, extra or dual cab picked from the tray length, with the rear axle moved back for long trays).
 
 Settings are remembered in the browser. Use **Save settings** and **Load settings** to keep a design as a file.
 
@@ -41,7 +43,7 @@ three.js r128 and jsPDF 2.5.1 (both MIT licensed) are inlined by `build.js`.
 `test/` holds the checks used during development:
 
 - headless Chromium runs that save the PDF and STEP for several setups (`npm test`; set `CHROMIUM_PATH` to a Chromium binary)
-- OpenCASCADE checks of the STEP files (`validate_step.py`, `clash.py`, `sweep.py`; need Python with cadquery)
+- OpenCASCADE checks of the STEP files (`validate_step.py`, `clash.py`, `sweep.py`, and `sweep_joins.py` for the row joins and grades; need Python with cadquery)
 
 ## Please note
 

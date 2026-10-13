@@ -15,10 +15,14 @@ const DEFAULTS = {
   shs: 25, shsT: 2.0,    // SHS size and wall
   frameMat: 'steel',     // SHS frame, doors, tabs, mesh, hinges: steel | aluminium
   sheetMat: 'steel',     // floor, roof, walls, divider: steel | aluminium
+  frameKind: 'pregalv',  // grade and finish within the frame material (KINDS.frame)
+  sheetKind: 'galv',     // grade and finish within the sheet material (KINDS.sheet)
+  floorType: 'plain',    // plain | tread (checker plate)
   tFloor: 2.0, tSheet: 1.6, tRoof: 1.6,
   wallFront: 'solid',    // face toward the cab: solid | perforated | mesh
   wallRear: 'solid',     // face toward the tailgate
-  wallMiddle: 'perforated', // back-to-back walls between rows
+  wallMiddle: 'perforated', // walls between rows
+  rowJoin: 'separate',   // how rows meet: separate | sandwich | shared2 | shared (see ROW_JOINS)
   divider: 'solid',      // between the two dogs of a row: solid | perforated
   holeD: 30, holePitch: 75, holeMargin: 45,
   meshPitch: 50, meshWire: 4, meshEdge: 25,
@@ -32,7 +36,53 @@ const DEFAULTS = {
   notchClear: 5,
   stockLength: 6500, kerf: 3,
   sheetW: 2400, sheetH: 1200,
+  lock: 'tray',          // which set of sizes "Fit" keeps: tray | cages
 };
+// sizes that go with each material, applied when the material is switched on the page
+const MAT_DEFAULTS = {
+  frame: { steel: { shs: 25, shsT: 2.0 }, aluminium: { shs: 40, shsT: 2.0 } },
+  sheet: { steel: { tSheet: 1.6, tRoof: 1.6, tFloor: 2.0, floorType: 'plain' },
+           aluminium: { tSheet: 2.0, tRoof: 2.0, tFloor: 3.0, floorType: 'tread' } },
+};
+// grades within each material. finish drives the colour; metal overrides the material (stainless)
+const KINDS = {
+  frame: {
+    steel: [
+      { id: 'pregalv', label: 'Pre-galv C350L0 (in-line galv)', grade: 'C350L0, pre-galv', mesh: 'galv weldmesh', finish: 'galv' },
+      { id: 'black', label: 'Black C350L0, to powder coat', grade: 'C350L0, black', mesh: 'black weldmesh', finish: 'paint' },
+      { id: 'hdg', label: 'Black C350L0, hot-dip galv after', grade: 'C350L0, galv after fab', mesh: 'weldmesh, galv after fab', finish: 'galv' },
+      { id: 'ss304', label: 'Stainless 304', grade: '304', mesh: '304 stainless weldmesh', finish: 'stainless', metal: 'stainless' },
+      { id: 'ss316', label: 'Stainless 316 (marine)', grade: '316', mesh: '316 stainless weldmesh', finish: 'stainless', metal: 'stainless' },
+    ],
+    aluminium: [
+      { id: '6061', label: '6061-T6 structural', grade: '6061-T6', mesh: 'aluminium weldmesh', finish: 'alu' },
+      { id: '6082', label: '6082-T6 structural', grade: '6082-T6', mesh: 'aluminium weldmesh', finish: 'alu' },
+      { id: '6060', label: '6060-T5 light duty', grade: '6060-T5', mesh: 'aluminium weldmesh', finish: 'alu' },
+    ],
+  },
+  sheet: {
+    steel: [
+      { id: 'galv', label: 'Galvanised Z275', grade: 'galv Z275', tread: 'galv tread plate', finish: 'galv' },
+      { id: 'zinc', label: 'Zincanneal, to paint', grade: 'Zincanneal', tread: 'checker plate', finish: 'paint' },
+      { id: 'black', label: 'Black, to paint', grade: 'cold rolled', tread: 'checker plate', finish: 'paint' },
+      { id: 'ss304', label: 'Stainless 304', grade: '304 2B', tread: '304 tread plate', finish: 'stainless', metal: 'stainless' },
+      { id: 'ss316', label: 'Stainless 316 (marine)', grade: '316 2B', tread: '316 tread plate', finish: 'stainless', metal: 'stainless' },
+    ],
+    aluminium: [
+      { id: '5052', label: '5052-H32 marine', grade: '5052-H32', tread: '5052-H32 tread plate', finish: 'alu' },
+      { id: '5005', label: '5005-H34 general', grade: '5005-H34', tread: '5052-H32 tread plate', finish: 'alu' },
+      { id: '5083', label: '5083-H321 heavy duty', grade: '5083-H321', tread: '5083-H321 tread plate', finish: 'alu' },
+    ],
+  },
+};
+// how neighbouring rows meet
+const ROW_JOINS = {
+  separate: { label: 'Separate frames, a wall each', short: 'separate frames, bolted' },
+  sandwich: { label: 'Separate frames, one sheet between', short: 'separate frames, one sheet between' },
+  shared2: { label: 'Shared frame, a wall each side', short: 'shared frame, a wall each side' },
+  shared: { label: 'Shared frame, one wall', short: 'shared frame, one wall' },
+};
+const TREAD_MASS = 1.1; // tread plate weighs about 10% more than plain sheet of the same base thickness
 
 const HINGE_D = 16, HINGE_L = 100, HINGE_END = 70; // HINGE_D/L: defaults; the model sizes them from the SHS (derived)
 const MAX_HOLES = 2500;
@@ -46,12 +96,25 @@ const MATERIALS = {
 };
 const SHEET_KINDS = ['floor', 'roof', 'sheet', 'perf'];
 const SHS_SIZES = [20, 25, 30, 35, 40], SHS_WALLS = [1.6, 2.0, 2.5, 3.0]; // the sections offered on the page
+// the chosen grade for 'frame' or 'sheet' (falls back to the first one offered for the material)
+function kindOf(P, which) {
+  const list = KINDS[which][P[which + 'Mat']] || KINDS[which].steel;
+  return list.find(k => k.id === P[which + 'Kind']) || list[0];
+}
+// steel | aluminium | stainless
+function metalOf(P, which) { const k = kindOf(P, which); return k.metal || P[which + 'Mat']; }
 // what each part is made of: sheets follow the sheet choice; everything welded to the frame follows the frame
 function partMaterial(p, P) {
   if (p.kind === 'cap') return 'plastic';
-  if (p.kind === 'bolt' || p.kind === 'latch') return P.frameMat === 'aluminium' ? 'stainless' : 'steel';
-  if (SHEET_KINDS.includes(p.kind)) return P.sheetMat;
-  return P.frameMat;
+  if (p.kind === 'bolt' || p.kind === 'latch') return metalOf(P, 'frame') === 'steel' ? 'steel' : 'stainless';
+  if (SHEET_KINDS.includes(p.kind)) return metalOf(P, 'sheet');
+  return metalOf(P, 'frame');
+}
+function partFinish(p, P) {
+  if (p.kind === 'cap') return 'plastic';
+  if (p.kind === 'bolt' || p.kind === 'latch') return metalOf(P, 'frame') === 'steel' ? 'zinc' : 'stainless';
+  if (p.kind === 'hinge' && metalOf(P, 'frame') === 'steel') return 'zinc';
+  return kindOf(P, SHEET_KINDS.includes(p.kind) ? 'sheet' : 'frame').finish;
 }
 
 function normParams(p) {
@@ -71,6 +134,13 @@ function normParams(p) {
   for (const k of ['wallFront', 'wallRear', 'wallMiddle']) if (!['solid', 'perforated', 'mesh'].includes(P[k])) P[k] = DEFAULTS[k];
   if (!['solid', 'perforated'].includes(P.divider)) P.divider = 'solid';
   for (const k of ['frameMat', 'sheetMat']) if (!['steel', 'aluminium'].includes(P[k])) P[k] = 'steel';
+  P.frameKind = kindOf(P, 'frame').id; P.sheetKind = kindOf(P, 'sheet').id;
+  if (!['plain', 'tread'].includes(P.floorType)) P.floorType = 'plain';
+  if (!ROW_JOINS[P.rowJoin]) P.rowJoin = 'separate';
+  if (!['tray', 'cages'].includes(P.lock)) P.lock = 'tray';
+  P.trayBolts = !!P.trayBolts; P.joinBolts = !!P.joinBolts;
+  // a shared frame is welded right through: there is nothing to bolt between rows
+  if (P.rowJoin === 'shared' || P.rowJoin === 'shared2') P.joinBolts = false;
   const h = [];
   for (let i = 0; i < P.rows; i++) {
     const src = (P.hinges && P.hinges[i]) || {};
@@ -300,30 +370,45 @@ function wallDepth(pr, sA, sB) {
 }
 
 /* ------------------------------------------------------------------ model */
-const COLORS = {
+// colours by finish (STEP file); the viewer has matching styles
+const COLORS = { // black powder coat or paint
   frame: [0.17, 0.18, 0.20], door: [0.17, 0.18, 0.20], tab: [0.17, 0.18, 0.20],
   floor: [0.30, 0.31, 0.33], sheet: [0.36, 0.38, 0.41], roof: [0.36, 0.38, 0.41],
   perf: [0.40, 0.42, 0.45], mesh: [0.66, 0.68, 0.71], hinge: [0.86, 0.70, 0.28],
   latch: [0.86, 0.70, 0.28], bolt: [0.75, 0.76, 0.78], cap: [0.08, 0.08, 0.09],
 };
-const COLORS_AL = { // satin aluminium
-  frame: [0.66, 0.68, 0.71], door: [0.66, 0.68, 0.71], tab: [0.66, 0.68, 0.71],
-  floor: [0.70, 0.72, 0.74], sheet: [0.76, 0.78, 0.80], roof: [0.76, 0.78, 0.80],
-  perf: [0.74, 0.76, 0.78], mesh: [0.80, 0.82, 0.84], hinge: [0.78, 0.79, 0.81],
+const FINISH_COLORS = {
+  galv: { frame: [0.43, 0.46, 0.48], door: [0.43, 0.46, 0.48], tab: [0.43, 0.46, 0.48], floor: [0.50, 0.53, 0.55],
+          sheet: [0.56, 0.59, 0.61], roof: [0.56, 0.59, 0.61], perf: [0.54, 0.57, 0.59], mesh: [0.70, 0.72, 0.74] },
+  alu: { frame: [0.66, 0.68, 0.71], door: [0.66, 0.68, 0.71], tab: [0.66, 0.68, 0.71], floor: [0.70, 0.72, 0.74],
+         sheet: [0.76, 0.78, 0.80], roof: [0.76, 0.78, 0.80], perf: [0.74, 0.76, 0.78], mesh: [0.80, 0.82, 0.84], hinge: [0.78, 0.79, 0.81] },
+  stainless: { frame: [0.70, 0.72, 0.75], door: [0.70, 0.72, 0.75], tab: [0.70, 0.72, 0.75], floor: [0.72, 0.74, 0.77],
+               sheet: [0.78, 0.80, 0.82], roof: [0.78, 0.80, 0.82], perf: [0.76, 0.78, 0.80], mesh: [0.82, 0.84, 0.86],
+               hinge: [0.80, 0.81, 0.83], latch: [0.80, 0.81, 0.83], bolt: [0.80, 0.81, 0.83] },
 };
 function colourOf(p) {
-  if (p.material === 'aluminium' && COLORS_AL[p.kind]) return COLORS_AL[p.kind];
-  if (p.material === 'stainless') return [0.74, 0.75, 0.77];
+  const f = FINISH_COLORS[p.finish];
+  if (f && f[p.kind]) return f[p.kind];
   return COLORS[p.kind] || [0.5, 0.5, 0.5];
 }
+const METAL_WORD = { steel: 'steel', aluminium: 'aluminium', stainless: 'stainless steel' };
 // material wording used in the drawings, the STEP file and the page
 function materialText(p, P) {
-  const m = MATERIALS[p.material] || MATERIALS.steel;
   if (p.material === 'plastic') return 'plastic';
-  if (p.material === 'stainless') return 'stainless steel';
-  if (p.kind === 'mesh') return m.meshName;
-  if (SHEET_KINDS.includes(p.kind)) return `${m.label.toLowerCase()} sheet, ${m.sheetGrade}`;
-  return `${m.label.toLowerCase()}, ${m.shsGrade}`;
+  if (p.kind === 'bolt' || p.kind === 'latch') return p.material === 'stainless' ? 'stainless steel' : 'steel, zinc plated';
+  const which = SHEET_KINDS.includes(p.kind) ? 'sheet' : 'frame';
+  const k = kindOf(P, which), word = METAL_WORD[metalOf(P, which)];
+  if (p.kind === 'mesh') return k.mesh;
+  if (p.kind === 'hinge') return metalOf(P, 'frame') === 'steel' ? 'steel, zinc plated' : `${word}`;
+  if (p.kind === 'floor' && P.floorType === 'tread') return `${word} ${k.tread}`;
+  if (which === 'sheet') return `${word} sheet, ${k.grade}`;
+  return `${word}, ${k.grade}`;
+}
+// short grade words for drawings and the page: e.g. "steel C350L0, pre-galv", "aluminium 5052-H32"
+function gradeText(P, which) {
+  const k = kindOf(P, which), m = metalOf(P, which);
+  if (m === 'stainless') return `stainless ${k.grade}`;
+  return `${METAL_WORD[m]} ${k.grade}`;
 }
 
 function wirePositions(span, P) {
@@ -361,16 +446,32 @@ function derived(P) {
   const crush = [{ od: 16, wall: 2.0, bolt: 10 }, { od: 14, wall: 1.8, bolt: 10 }, { od: 12, wall: 1.6, bolt: 8 }].find(c => c.od + 0.7 <= flat) || null;
   // weld-on bullet hinge sized to the tube
   const hingeD = A <= 25 ? 16 : A <= 35 ? 20 : 25, hingeL = hingeD === 25 ? 120 : 100;
+  // how the rows meet: separate frames sit back to back (a sheet may be clamped between them);
+  // a shared frame has one SHS line between neighbouring rows
+  const N = P.rows;
+  const shared = N > 1 && (P.rowJoin === 'shared' || P.rowJoin === 'shared2');
+  const sandwich = N > 1 && P.rowJoin === 'sandwich';
+  const plateT = sandwich && P.wallMiddle !== 'mesh' ? P.tSheet : 0;
+  const pitch = shared ? D - A : D + plateT;
+  const rowY = [], joints = [];
+  for (let i = 0; i < N; i++) rowY.push(i * pitch);
+  for (let i = 0; i < N - 1; i++) joints.push(shared ? rowY[i + 1] + h : rowY[i] + D + plateT / 2);
+  // keepers on a shared post get half its depth each (both neighbouring doors use that post)
+  const halfKeeper = [6, 8, 10, 12, 16, 20].filter(w => w <= h - 1).pop() || 6;
   return {
+    N, shared, sandwich, plateT, pitch, rowY, joints, Ltot: N ? (N - 1) * pitch + D : 0,
+    bolted: !shared && P.joinBolts && N > 1, betweenDogs: shared ? A : 2 * A + plateT, halfKeeper,
     crush, trayBoltD: crush ? crush.bolt : 8, shsFlat: flat,
     // steel and aluminium can't be welded together: infills become folded trays riveted into the frame
     mixed: P.frameMat !== P.sheetMat,
-    trayF: Math.max(8, Math.floor(A - P.tSheet - 1)), divF: Math.max(5, Math.floor(A / 2 - P.tSheet / 2 - 0.5)),
+    // wall tray flanges run back into the rail; with a wall each side of a shared rail each gets half of it
+    trayF: shared && P.rowJoin === 'shared2' ? Math.max(5, Math.floor(h - P.tSheet - 0.5)) : Math.max(8, Math.floor(A - P.tSheet - 1)),
+    divF: Math.max(5, Math.floor(A / 2 - P.tSheet / 2 - 0.5)),
     hingeD, hingeL,
     hingeEnd: Math.min(HINGE_END, Math.max(10, ((doorZ1 - doorZ0) - 2 * hingeL) / 2 - 10)),
     // hinge barrel sits on the gap centre: how far it reaches past each tube's corner radius onto the flat face
     hingeReach: hingeD / 2 - (P.doorGap / 2 + P.shsR),
-    joinBoltL: [50, 55, 60, 65, 70, 75, 80, 90, 100, 110, 120].find(l => l >= 2 * A + 18) || 120,
+    joinBoltL: [50, 55, 60, 65, 70, 75, 80, 90, 100, 110, 120].find(l => l >= 2 * A + plateT + 18) || 120,
     A, h, L, D, H, XC, zFloor, zTopU, doorY0, doorY1, doorZ0, doorZ1,
     doorW: doorY1 - doorY0, doorH: doorZ1 - doorZ0, latchZ: (doorZ0 + doorZ1) / 2,
     bays: [[A, XC - h], [XC + h, L - A]], joistC, roofC,
@@ -381,17 +482,34 @@ function derived(P) {
   };
 }
 
+// what closes module i's rear or front face: {type, style} or null when the face is left open
+// (the shared wall belongs to the row in front, or a sheet is clamped between the two frames).
+// style 'infill': flush with the inside face of the rail (mesh: on the rail centre line);
+// style 'centre': one sheet on the centre line of a shared rail
+function faceSpec(P, G, i, face) {
+  const N = P.rows;
+  if (face === 'rear' && i === 0) return { type: P.wallRear, style: 'infill' };
+  if (face === 'front' && i === N - 1) return { type: P.wallFront, style: 'infill' };
+  const t = P.wallMiddle;
+  if (G.shared) {
+    if (face === 'front') return P.rowJoin === 'shared2' && t !== 'mesh' ? { type: t, style: 'infill' } : null;
+    return { type: t, style: P.rowJoin === 'shared' && t !== 'mesh' ? 'centre' : 'infill' };
+  }
+  if (G.sandwich) return t === 'mesh' && face === 'front' ? { type: t, style: 'infill' } : null;
+  return { type: t, style: 'infill' };
+}
+
 function build(params) {
   const P = normParams(params);
   const G = derived(P);
   // join bolt heads sit at the top-rail level: find the nearest spot clear of the end rail, roof bars and centre cross
-  if (P.joinBolts && P.rows > 1) {
+  if (G.bolted) {
     const clr = P.shs / 2 + 15;
     const blocked = G.roofC.map(c => [c - clr, c + clr]).concat([[-1e9, P.shs + 15], [G.XC - clr, 1e9]]);
     const free = (x) => blocked.every(([a, b]) => x <= a || x >= b);
     let best = null;
     for (let d = 0; d <= G.XC && best === null; d += 1) for (const x of [P.joinBoltInset - d, P.joinBoltInset + d]) if (free(x)) { best = x; break; }
-    if (best === null) { P.joinBolts = false; P.joinBoltsDropped = true; }
+    if (best === null) { P.joinBolts = false; P.joinBoltsDropped = true; G.bolted = false; }
     else if (Math.abs(best - P.joinBoltInset) > 1e-9) { P.joinBoltMoved = P.joinBoltInset; P.joinBoltInset = best; }
   }
   // cap the number of air holes so the model, viewer and STEP stay workable
@@ -400,9 +518,10 @@ function build(params) {
     const count = () => {
       let n = 0;
       for (let i = 0; i < P.rows; i++) {
-        for (const t of [i === 0 ? P.wallRear : P.wallMiddle, i === P.rows - 1 ? P.wallFront : P.wallMiddle]) if (t === 'perforated') n += 2 * per(G.XC - G.h - G.A, G.openH);
+        for (const face of ['rear', 'front']) { const f = faceSpec(P, G, i, face); if (f && f.type === 'perforated') n += 2 * per(G.XC - G.h - G.A, G.openH); }
         if (P.divider === 'perforated') n += per(G.openW, G.openH);
       }
+      if (G.plateT && P.wallMiddle === 'perforated') n += (P.rows - 1) * 2 * per(G.XC - G.h - G.A, G.openH);
       return n;
     };
     if (count() > MAX_HOLES) { P.holePitchWanted = P.holePitch; while (count() > MAX_HOLES) P.holePitch += 5; }
@@ -414,17 +533,19 @@ function build(params) {
 
   for (let i = 0; i < N; i++) {
     const tag = rowLabel(i, N);
-    const yoff = i * D;
-    const rearType = i === 0 ? P.wallRear : P.wallMiddle;
-    const frontType = i === N - 1 ? P.wallFront : P.wallMiddle;
-    const joinRear = P.joinBolts && i > 0, joinFront = P.joinBolts && i < N - 1;
+    const yoff = G.rowY[i];
+    // with a shared frame the rails and posts between two rows belong to the row in front
+    const ownFront = !(G.shared && i < N - 1);
+    const sharedRear = G.shared && i > 0, sharedFront = G.shared && i < N - 1;
+    const joinRear = G.bolted && i > 0, joinFront = G.bolted && i < N - 1;
     const hinge = P.hinges[N - 1 - i];
     const mod = [];
     const add_ = (o) => { mod.push(Object.assign({ module: tag, group: 'body' }, o)); };
+    const railYs = ownFront ? [['rear', h], ['front', D - h]] : [['rear', h]];
 
     // ---------------- frame
     for (const [lvl, zc] of [['bottom', h], ['top', H - h]]) {
-      for (const [side, yc] of [['rear', h], ['front', D - h]]) {
+      for (const [side, yc] of railYs) {
         const pr = shsP(P, 'x', 0, L, yc, zc);
         let mark = 'F1', note = 'long rail';
         if (lvl === 'top' && ((side === 'rear' && joinRear) || (side === 'front' && joinFront))) {
@@ -462,23 +583,29 @@ function build(params) {
       for (const [side, xc] of [['left', c], ['right', L - c]])
         add_({ name: `roof cross ${side} ${c}`, kind: 'frame', mark: 'F3', stock: SHS, size: D - 2 * A, note: 'cross member', solids: [shsP(P, 'y', A, D - 2 * A, xc, H - h)] });
     });
-    const posts = [[h, h, 'corner RL'], [h, D - h, 'corner FL'], [L - h, h, 'corner RR'], [L - h, D - h, 'corner FR'], [XC, h, 'centre R'], [XC, D - h, 'centre F']];
+    const posts = [[h, h, 'corner RL'], [h, D - h, 'corner FL'], [L - h, h, 'corner RR'], [L - h, D - h, 'corner FR'], [XC, h, 'centre R'], [XC, D - h, 'centre F']]
+      .filter(([, yc]) => ownFront || yc < D / 2);
     for (const [xc, yc, nm] of posts)
       add_({ name: `post ${nm}`, kind: 'frame', mark: 'F2', stock: SHS, size: H - 2 * A, note: 'post', solids: [shsP(P, 'z', A, H - 2 * A, xc, yc)] });
 
     // ---------------- floor, roof, divider
+    // on a shared frame every floor runs between rail centre lines (all rows the same); roofs cover the outer rails
     const c = P.notchClear, nc = A + c;
-    const fpts = [[nc, 0], [XC - h - c, 0], [XC - h - c, A + c], [XC + h + c, A + c], [XC + h + c, 0], [L - nc, 0], [L - nc, nc], [L, nc],
-      [L, D - nc], [L - nc, D - nc], [L - nc, D], [XC + h + c, D], [XC + h + c, D - A - c], [XC - h - c, D - A - c], [XC - h - c, D],
-      [nc, D], [nc, D - nc], [0, D - nc], [0, nc], [nc, nc]];
+    const fy0 = G.shared ? h : 0, fy1 = G.shared ? D - h : D;
+    const fpts = [[nc, fy0], [XC - h - c, fy0], [XC - h - c, A + c], [XC + h + c, A + c], [XC + h + c, fy0], [L - nc, fy0], [L - nc, nc], [L, nc],
+      [L, D - nc], [L - nc, D - nc], [L - nc, fy1], [XC + h + c, fy1], [XC + h + c, D - A - c], [XC - h - c, D - A - c], [XC - h - c, fy1],
+      [nc, fy1], [nc, D - nc], [0, D - nc], [0, nc], [nc, nc]];
     const floorLoops = [polyLoop(fpts)];
     if (P.trayBolts && G.trayBoltJoist !== null)
       for (const xb of [G.trayBoltJoist, L - G.trayBoltJoist]) for (const yb of [P.trayBoltInset, D - P.trayBoltInset])
         floorLoops.push(reverseLoop(circleLoop(xb, yb, (G.trayBoltD + 1) / 2)));
-    add_({ name: 'floor', kind: 'floor', mark: 'S1', stock: `Sheet ${P.tFloor.toFixed(1)}`, size: [L, D], note: P.trayBolts && G.trayBoltJoist !== null ? 'post notches + bolt holes' : 'post notches',
-           solids: [prism([0, 0, A], X, Y, P.tFloor, floorLoops)] });
-    add_({ name: 'roof', kind: 'roof', mark: 'S2', stock: `Sheet ${P.tRoof.toFixed(1)}`, size: [L, D], note: G.mixed ? 'riveted to top frame' : 'sits on top frame',
-           solids: [boxP(0, L, 0, D, H, H + P.tRoof)] });
+    const tread = P.floorType === 'tread';
+    add_({ name: 'floor', kind: 'floor', mark: 'S1', stock: `${tread ? 'Tread plate' : 'Sheet'} ${P.tFloor.toFixed(1)}`, size: [L, fy1 - fy0],
+           note: (G.shared ? 'ends on the rail centre lines, ' : '') + (P.trayBolts && G.trayBoltJoist !== null ? 'post notches + bolt holes' : 'post notches'),
+           massFactor: tread ? TREAD_MASS : 1, tread, solids: [prism([0, 0, A], X, Y, P.tFloor, floorLoops)] });
+    const ry0 = sharedRear ? h : 0, ry1 = sharedFront ? D - h : D;
+    add_({ name: 'roof', kind: 'roof', mark: 'S2', stock: `Sheet ${P.tRoof.toFixed(1)}`, size: [L, ry1 - ry0], note: G.mixed ? 'riveted to top frame' : 'sits on top frame',
+           solids: [boxP(0, L, ry0, ry1, H, H + P.tRoof)] });
     {
       const w = D - 2 * A, hh = zTopU - zFloor;
       let holes = [];
@@ -501,10 +628,14 @@ function build(params) {
     }
 
     // ---------------- long walls
-    for (const [face, type] of [['rear', rearType], ['front', frontType]]) {
+    for (const face of ['rear', 'front']) {
+      const spec = faceSpec(P, G, i, face);
+      if (!spec) continue;
+      const type = spec.type;
       G.bays.forEach(([xa, xb], bi) => {
         const bay = bi === 0 ? 'left' : 'right';
         const w = xb - xa, hh = zTopU - zFloor;
+        const grid = () => { const out = [], g = holeGrid(w, hh, P); for (const du of g.us) for (const dv of g.vs) out.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]); return out; };
         if (type === 'mesh') {
           const yc = face === 'rear' ? h : D - h;
           const dogSide = face === 'rear' ? 1 : -1;
@@ -514,14 +645,24 @@ function build(params) {
           for (const dv of wirePositions(hh, P)) sol.push(cylP(s, [xa, yc - dogSide * s / 2, zFloor + hh / 2 + dv], [xb, yc - dogSide * s / 2, zFloor + hh / 2 + dv]));
           add_({ name: `${face} wall ${bay} mesh`, kind: 'mesh', mark: 'M1', stock: `Weldmesh ${P.meshPitch}x${P.meshPitch}x${P.meshWire}`, size: [w, hh],
                  note: `${wirePositions(w, P).length} x ${wirePositions(hh, P).length} wires`, solids: sol });
+        } else if (spec.style === 'centre') {
+          // one wall between rows, on the centre line of the shared rail (this row's rear rail)
+          const t = P.tSheet, y0 = h - t / 2;
+          const holes = type === 'perforated' ? grid() : [];
+          const sol = [plateP('y', y0, y0 + t, [zFloor, zTopU], [xa, xb], holes)];
+          let size = [w, hh], note = holes.length ? `wall between rows, ${holes.length} x ${P.holeD} holes` : 'wall between rows, on the rail centre line';
+          if (G.mixed) { // folded tray, flanges toward the front against the posts, rail and floor
+            const f = G.divF, ya = y0 + t, yb = ya + f;
+            sol.push(boxP(xa, xa + t, ya, yb, zFloor + t, zTopU - t), boxP(xb - t, xb, ya, yb, zFloor + t, zTopU - t),
+                     boxP(xa, xb, ya, yb, zFloor, zFloor + t), boxP(xa, xb, ya, yb, zTopU - t, zTopU));
+            size = [w + 2 * f, hh + 2 * f];
+            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+          }
+          add_({ name: `rear wall ${bay} shared ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: 'S7',
+                 stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null, solids: sol });
         } else {
           const y0 = face === 'rear' ? A - P.tSheet : D - A;
-          let holes = [];
-          if (type === 'perforated') {
-            const g = holeGrid(w, hh, P);
-            // profile coords for a plate normal to Y are (z, x)
-            for (const du of g.us) for (const dv of g.vs) holes.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]);
-          }
+          const holes = type === 'perforated' ? grid() : [];
           const t = P.tSheet, sol = [plateP('y', y0, y0 + t, [zFloor, zTopU], [xa, xb], holes)];
           let size = [w, hh], note = type === 'perforated' ? `wall infill, ${holes.length} x ${P.holeD} holes` : 'wall infill, flush with inside face';
           if (G.mixed) { // folded tray: flanges run back into the frame opening against posts, rail and floor
@@ -540,11 +681,11 @@ function build(params) {
 
     // ---------------- doors
     for (const side of ['L', 'R']) {
-      for (const dp of buildDoor(P, G, side, hinge[side])) mod.push(Object.assign({ module: tag }, dp));
+      for (const dp of buildDoor(P, G, side, hinge[side], { rear: sharedRear, front: sharedFront })) mod.push(Object.assign({ module: tag }, dp));
     }
 
     // ---------------- caps on the open long-rail ends
-    for (const zc of [h, H - h]) for (const yc of [h, D - h]) for (const [x0, x1, nm] of [[-2, 0, 'L'], [L, L + 2, 'R']])
+    for (const zc of [h, H - h]) for (const [, yc] of railYs) for (const [x0, x1, nm] of [[-2, 0, 'L'], [L, L + 2, 'R']])
       add_({ name: `end cap ${nm} y${Math.round(yc)} z${Math.round(zc)}`, kind: 'cap', mark: 'H5', hardware: true, note: 'plastic insert cap', solids: [boxP(x0, x1, yc - h, yc + h, zc - h, zc + h)] });
 
     // ---------------- tray bolts
@@ -564,12 +705,29 @@ function build(params) {
     }
   }
 
-  // ---------------- join bolts between rows
-  if (P.joinBolts) {
+  // ---------------- one sheet clamped between neighbouring frames
+  if (G.plateT > 0) {
     for (let i = 0; i < N - 1; i++) {
-      const yj = (i + 1) * D, zc = H - h;
+      const y0 = G.rowY[i] + D, t = G.plateT, holes = [];
+      if (P.wallMiddle === 'perforated') for (const [xa, xb] of G.bays) {
+        const w = xb - xa, hh = zTopU - zFloor, g = holeGrid(w, hh, P);
+        for (const du of g.us) for (const dv of g.vs) holes.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]);
+      }
+      const nAir = holes.length;
+      if (G.bolted) for (const xb of [P.joinBoltInset, L - P.joinBoltInset]) holes.push([H - h, xb, 5.5]);
+      parts.push({ name: `J S8 sheet between rows ${rowLabel(i + 1, N)}${rowLabel(i, N)}`, module: 'J', group: 'body', kind: nAir ? 'perf' : 'sheet', mark: 'S8',
+        stock: `Sheet ${t.toFixed(1)}`, size: [L, H + P.tRoof], holes: nAir,
+        note: 'clamped between the frames' + (nAir ? `, ${nAir} x ${P.holeD} holes` : '') + (G.bolted ? ', 2 x 11 bolt holes' : ''),
+        solids: [plateP('y', y0, y0 + t, [0, H + P.tRoof], [0, L], holes)] });
+    }
+  }
+
+  // ---------------- join bolts between rows (through both top rails, and the sheet between them if any)
+  if (G.bolted) {
+    for (let i = 0; i < N - 1; i++) {
+      const yf = G.rowY[i] + D, zc = H - h;
       for (const xb of [P.joinBoltInset, L - P.joinBoltInset]) {
-        const ya = yj - A - 2, yb = yj + A + 2;
+        const ya = yf - A - 2, yb = yf + G.plateT + A + 2;
         parts.push({ name: `J H4 join bolt ${rowLabel(i + 1, N)}${rowLabel(i, N)} x${xb}`, module: 'J', group: 'body', kind: 'bolt', mark: 'H4', hardware: true,
           note: `M10 x ${G.joinBoltL} join bolt set`,
           solids: [hexP(16, [xb, ya - 6.4, zc], [xb, ya, zc]), cylP(20, [xb, ya, zc], [xb, ya + 2, zc], 10),
@@ -578,11 +736,11 @@ function build(params) {
       }
     }
   }
-  for (const p of parts) p.material = partMaterial(p, P);
+  for (const p of parts) { p.material = partMaterial(p, P); p.finish = partFinish(p, P); }
   return { P, G, parts };
 }
 
-function buildDoor(P, G, side, hinge) {
+function buildDoor(P, G, side, hinge, sharedPost) {
   const { A, h, D, doorY0: y0, doorY1: y1, doorZ0: z0, doorZ1: z1, doorW, doorH, latchZ, zTopU, XC } = G;
   const out = [];
   const xo = 0;
@@ -626,12 +784,17 @@ function buildDoor(P, G, side, hinge) {
     push({ name: `${side} latch guide ${k + 1}`, kind: 'latch', mark: k === 0 ? 'H2' : null, hardware: true, note: 'drop-handle slide bolt, weld-on',
            solids: [cylP(LATCH.tubeOD, [xl, a, latchZ], [xl, b, latchZ], LATCH.tubeID)] });
   });
-  [ya, yb] = span(Yp(0), Yp(A));
-  out.push({ name: `${side} latch keeper packer`, kind: 'tab', mark: 'T5', stock: `Flat bar ${A}x3`, size: 40, note: 'keeper packer on post', group: 'body',
-             solids: [boxP(xo - T, xo, ya, yb, latchZ - 20, latchZ + 20)] });
+  // on a post shared with the next row the keeper gets only its own half of the post
+  const half = !!(sharedPost && (hinge === 'rear' ? sharedPost.front : sharedPost.rear));
+  const kd = half ? G.halfKeeper : A;
+  [ya, yb] = span(Yp(0), Yp(kd));
+  out.push(half ? { name: `${side} latch keeper packer half`, kind: 'tab', mark: 'T6', stock: `Flat bar ${kd}x3`, size: 40, note: 'keeper packer, half a shared post', group: 'body',
+                    solids: [boxP(xo - T, xo, ya, yb, latchZ - 20, latchZ + 20)] }
+             : { name: `${side} latch keeper packer`, kind: 'tab', mark: 'T5', stock: `Flat bar ${A}x3`, size: 40, note: 'keeper packer on post', group: 'body',
+                 solids: [boxP(xo - T, xo, ya, yb, latchZ - 20, latchZ + 20)] });
   out.push({ name: `${side} latch keeper`, kind: 'latch', hardware: true, group: 'body', solids: [cylP(LATCH.tubeOD, [xl, ya, latchZ], [xl, yb, latchZ], LATCH.tubeID)] });
   {
-    const [a, b] = span(Yd(LATCH.plateW), Yp(20));
+    const [a, b] = span(Yd(LATCH.plateW), Yp(Math.min(20, kd)));
     const yhd = Yd(35);
     push({ name: `${side} latch bolt`, kind: 'latch', hardware: true,
            solids: [cylP(LATCH.boltD, [xl, a, latchZ], [xl, b, latchZ]), cylP(10, [xl, yhd, latchZ - LATCH.boltD / 2], [xl, yhd, latchZ - 32])] });
@@ -665,7 +828,7 @@ function buildDoor(P, G, side, hinge) {
 
 /* ------------------------------------------------------------------ quantities */
 function partVolume(p) { return p.solids.reduce((a, s) => a + prismVolume(s), 0); }
-function partMass(p) { return partVolume(p) * (MATERIALS[p.material] || MATERIALS.steel).density; }
+function partMass(p) { return partVolume(p) * (p.massFactor || 1) * (MATERIALS[p.material] || MATERIALS.steel).density; }
 
 function bom(model) {
   const rows = new Map();
@@ -744,6 +907,8 @@ function nest(pieces, W, H, gap) {
   }
   return bins.map(b => ({ placed: b.placed }));
 }
+const fmt0 = (v) => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+const A_SMALL = (P) => P.shs < 30;
 function summary(model) {
   const { P, G, parts } = model;
   const b = bom(model);
@@ -767,8 +932,8 @@ function summary(model) {
     for (const q of [seg.a, seg.b]) for (const w of [0, s.len]) { const v = to3(s, q, w); xmin = Math.min(xmin, v[0]); xmax = Math.max(xmax, v[0]); }
   }
   const warnings = [];
-  const total = P.rows * P.depth;
-  if (total > P.trayLength) warnings.push({ level: 'bad', text: `The cages are ${Math.round(total)} long, ${Math.round(total - P.trayLength)} more than the tray length you entered.` });
+  const total = G.Ltot;
+  if (total > P.trayLength + 0.5) warnings.push({ level: 'bad', text: `The cages are ${fmt0(total)} long, ${fmt0(total - P.trayLength)} more than the tray length you entered.` });
   const stickOut = Math.max(-xmin, xmax - P.width);
   const sideRoom = (P.trayWidth - P.width) / 2;
   if (sideRoom < 0) warnings.push({ level: 'bad', text: `The cages are ${Math.round(-2 * sideRoom)} wider than the tray.` });
@@ -780,6 +945,8 @@ function summary(model) {
     if (P.hinges[r][side] === 'rear' && P.hinges[r + 1][side] === 'front')
       warnings.push({ level: 'warn', text: `Rows ${String.fromCharCode(65 + r)} and ${String.fromCharCode(66 + r)} ${side === 'L' ? 'left' : 'right'} doors hinge at the same joint. Their latches hit if both are open, so open one at a time.` });
   }
+  const halves = parts.filter(p => p.mark === 'T6').length;
+  if (halves) warnings.push({ level: A_SMALL(P) ? 'warn' : 'info', text: `${halves} latch keepers sit on shared posts, where each gets half the post (${G.halfKeeper} mm) because both neighbouring doors use that post.` + (A_SMALL(P) ? ' Use 30 SHS or bigger for a firmer latch.' : '') });
   if (P.joinBolts && P.rows > 1 && P.joinBoltMoved) warnings.push({ level: 'warn', text: `Join bolts moved to ${Math.round(P.joinBoltInset)} from the sides so they miss the roof bars.` });
   if (P.shsTWanted) warnings.push({ level: 'warn', text: `${P.shs} x ${P.shs} SHS is limited to ${P.shsT.toFixed(1)} wall here, so bolt holes fit its flat faces.` });
   if (P.trayBolts && G.trayBoltJoist !== null && !G.crush) warnings.push({ level: 'warn', text: `No crush tube fits inside ${P.shs} x ${P.shs} x ${P.shsT.toFixed(1)} SHS, so the M${G.trayBoltD} tray bolts go straight through the joist. Don't over-tighten them.` });
@@ -794,7 +961,7 @@ function summary(model) {
   let vMetal = 0, other = 0;
   for (const p of parts) {
     byMat[p.material] = (byMat[p.material] || 0) + partMass(p);
-    if (p.material === 'steel' || p.material === 'aluminium') vMetal += partVolume(p); else other += partMass(p);
+    if (p.material === 'steel' || p.material === 'aluminium' || p.material === 'stainless') vMetal += partVolume(p) * (p.massFactor || 1); else other += partMass(p);
   }
   const massIf = { steel: vMetal * MATERIALS.steel.density + other, aluminium: vMetal * MATERIALS.aluminium.density + other };
   const I = (a, t) => (Math.pow(a, 4) - Math.pow(a - 2 * t, 4)) / 12, area = (a, t) => a * a - (a - 2 * t) * (a - 2 * t);
@@ -815,10 +982,16 @@ function summary(model) {
   }
   if (P.sheetMat === 'aluminium' && P.tFloor < 3) warnings.push({ level: 'info', text: 'Aluminium floors are usually 3.0 or thicker (often tread plate). Thinner sheet flexes and dents under dogs.' });
   if (G.mixed) warnings.push({ level: 'info', text: "Steel and aluminium can't be welded together, so the wall and divider infills become folded trays riveted into the frame, and the floor and roof are riveted down. Use stainless rivets and keep the two metals apart with sealant or tape." });
+  const fm = metalOf(P, 'frame'), sm = metalOf(P, 'sheet');
+  if (!G.mixed && fm !== sm) warnings.push({ level: 'info', text: 'Stainless and mild steel can be welded together with 309L filler, but the mild steel side will still rust at the welds. Seal or paint those joints.' });
+  if (G.shared) warnings.push({ level: 'info', text: `With a shared frame the ${P.rows} rows are one welded frame, ${fmt0(total)} long and about ${Math.round(Object.values(m).reduce((a, c) => a + c, 0))} kg. It saves ${fmt0((P.rows - 1) * P.shs)} of length but can't be split into rows to lift or fit.` });
+  if (G.sandwich && P.wallMiddle === 'mesh') warnings.push({ level: 'info', text: "Mesh can't be clamped between two frames, so the mesh between rows is welded into the rear row's frame and the rows bolt straight together." });
+  if (G.plateT && G.mixed) warnings.push({ level: 'info', text: 'The sheets between rows touch both metals: put butyl tape on both faces where the frames clamp them.' });
   return {
     bom: b, bars, shsMetres, nests, masses: m, perModule: mods.map(k => m[k]),
     total: Object.values(m).reduce((a, c) => a + c, 0), byMat, massIf, frameAdvice,
     overall: { x0: xmin, x1: xmax, w: P.width, l: total, h: P.height + P.tRoof },
+    trayPlan: { headY: total, rearY: total - P.trayLength, spare: P.trayLength - total },
     stickOut, sideRoom, warnings,
   };
 }
@@ -994,7 +1167,7 @@ function writeSTEP(model, opts) {
   const rootNode = Object.assign(product(rootName), { extraItems: [], links: [] });
   const groups = new Map();
   for (const p of model.parts) {
-    const g = p.module === 'J' ? 'JOIN_BOLTS' : `MODULE_${p.module}`;
+    const g = p.module === 'J' ? 'BETWEEN_ROWS' : `MODULE_${p.module}`;
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(p);
   }
@@ -1048,8 +1221,9 @@ function writeSTEP(model, opts) {
   return head.concat(lines, ['ENDSEC;', 'END-ISO-10303-21;']).join('\n') + '\n';
 }
 
-const api = { DEFAULTS, MATERIALS, SHS_SIZES, SHS_WALLS, partMaterial, materialText, colourOf, partVolume, normParams, derived, build, bom, masses, summary, writeSTEP, partMass, prismVolume, wirePositions, holeGrid,
-  loopPolyline, loopArea, to3, rowLabel, COLORS, HINGE_D, HINGE_L, HINGE_END, LATCH, DENSITY, ffd, nest };
+const api = { DEFAULTS, MATERIALS, MAT_DEFAULTS, KINDS, ROW_JOINS, TREAD_MASS, SHS_SIZES, SHS_WALLS, kindOf, metalOf, gradeText, faceSpec, partMaterial, partFinish, materialText, colourOf,
+  partVolume, normParams, derived, build, bom, masses, summary, writeSTEP, partMass, prismVolume, wirePositions, holeGrid,
+  loopPolyline, loopArea, to3, rowLabel, COLORS, FINISH_COLORS, HINGE_D, HINGE_L, HINGE_END, LATCH, DENSITY, ffd, nest };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.CageCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

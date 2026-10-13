@@ -25,7 +25,7 @@ const own = ['core.js', 'viewer.js', 'drawings.js', 'app.js'].map(f => `<script>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Parametric steel SHS dog cages for a ute tray: N x 2 layout, live 3D model, A3 drawing set and STEP export.">
+<meta name="description" content="Parametric steel or aluminium SHS dog cages for a ute tray: N x 2 layout, live 3D model with tray and ute, A3 drawing set and STEP export.">
 ${headPart}
 </head>
 <body>
