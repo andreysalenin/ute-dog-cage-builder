@@ -1,0 +1,270 @@
+<title>Ute Dog Cage Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a workbench. Settings rail on the left, the live model fills the right,
+   results and downloads sit in a strip under the model. Stacks to one column on phones. */
+:root {
+  --bg: #eceee9;          /* galvanised-grey paper */
+  --panel: #f7f8f5;
+  --ink: #1b1f22;
+  --muted: #59626a;
+  --line: #cdd2cc;
+  --accent: #a8620a;      /* zinc-plate amber, deep enough for text on light */
+  --accent-soft: #f3e3c8;
+  --on-accent: #ffffff;
+  --viewer: #e3e6e1;
+  --good: #2c7146; --warn: #9a5700; --bad: #b0281f;
+  --warn-soft: #f6e7cf; --bad-soft: #f5dcd8; --info-soft: #e6e9e4;
+  --display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
+  --body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141719; --panel: #1b1f22; --ink: #e6e9e5; --muted: #9ba4aa; --line: #2f363a;
+    --accent: #eea83d; --accent-soft: #3a2c15; --on-accent: #1a1206; --viewer: #20252a;
+    --good: #6cc48d; --warn: #f0b154; --bad: #ff8a7e; --warn-soft: #3a2c15; --bad-soft: #3d1e1b; --info-soft: #24292c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141719; --panel: #1b1f22; --ink: #e6e9e5; --muted: #9ba4aa; --line: #2f363a;
+  --accent: #eea83d; --accent-soft: #3a2c15; --on-accent: #1a1206; --viewer: #20252a;
+  --good: #6cc48d; --warn: #f0b154; --bad: #ff8a7e; --warn-soft: #3a2c15; --bad-soft: #3d1e1b; --info-soft: #24292c;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.4; }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { min-height: 100%; display: grid; grid-template-rows: auto 1fr; padding-inline: 16px; padding-block: 12px 16px; gap: 12px; }
+header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.brand h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: 0.01em; line-height: 1; text-wrap: balance; }
+.brand .sub { color: var(--muted); font-size: 14px; }
+.brand .sub b { font-family: var(--mono); font-weight: 500; color: var(--ink); }
+
+.work { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 12px; min-height: 0; }
+.rail { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: auto; max-height: calc(100vh - 90px); min-width: 0; }
+.stage { display: grid; grid-template-rows: minmax(360px, 1fr) auto; gap: 12px; min-width: 0; min-height: 0; }
+
+/* settings */
+details.grp { border-bottom: 1px solid var(--line); }
+details.grp:last-child { border-bottom: 0; }
+details.grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: 0.04em; text-transform: uppercase; }
+details.grp > summary::-webkit-details-marker { display: none; }
+details.grp > summary .chev { width: 10px; height: 10px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; }
+details.grp[open] > summary .chev { transform: rotate(45deg); }
+.grp-body { padding: 0 14px 14px; display: grid; gap: 10px; }
+.field { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.field label, .lbl { font-size: 14px; color: var(--ink); }
+.field small, .hint { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.3; }
+.num { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); }
+.num input { width: 78px; border: 0; background: transparent; padding: 6px 4px 6px 8px; text-align: right; font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.num span { padding: 0 8px 0 2px; color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.num input:focus { outline: none; }
+.num:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+select { border: 1px solid var(--line); border-radius: var(--r); background: var(--bg); padding: 6px 8px; font-size: 14px; max-width: 170px; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--bg); }
+.stepper button { border: 0; background: transparent; width: 34px; height: 34px; cursor: pointer; font-size: 18px; color: var(--ink); }
+.stepper button:hover { background: var(--accent-soft); }
+.stepper output { min-width: 34px; text-align: center; font-family: var(--mono); font-weight: 500; font-size: 15px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check input { width: 17px; height: 17px; accent-color: var(--accent); }
+
+.hinge-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 10px; align-items: center; }
+.hinge-grid .hd { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.hinge-grid .row-lab { font-family: var(--mono); font-weight: 500; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button { border: 0; background: var(--bg); padding: 5px 9px; font-size: 13px; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: var(--r); padding: 7px 12px; cursor: pointer; font-size: 14px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn[disabled] { opacity: .55; cursor: progress; }
+
+/* viewer */
+.viewer { position: relative; background: var(--viewer); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; min-height: 360px; }
+.viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.tools { position: absolute; left: 10px; right: 10px; top: 10px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+.tools .seg, .tools .chips { pointer-events: auto; background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; max-width: 100%; }
+.chips label { display: flex; align-items: center; gap: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; border-left: 1px solid var(--line); }
+.chips label:first-child { border-left: 0; }
+.chips input { accent-color: var(--accent); }
+.vbar { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+.legend, .front-tag { font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--panel) 85%, transparent); padding: 4px 8px; border-radius: var(--r); }
+.front-tag { color: var(--ink); margin-left: auto; }
+
+/* results */
+.results { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; min-width: 0; }
+.card h2 { margin: 0 0 10px; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: 0.04em; text-transform: uppercase; }
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; }
+.fig .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.fig .v { font-family: var(--mono); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fig .v small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.warns { display: grid; gap: 6px; margin-top: 12px; }
+.warn { display: grid; grid-template-columns: 8px 1fr; gap: 8px; font-size: 13.5px; padding: 7px 10px; border-radius: var(--r); background: var(--warn-soft); }
+.warn::before { content: ""; width: 8px; border-radius: 2px; background: var(--warn); }
+.warn.bad { background: var(--bad-soft); }
+.warn.bad::before { background: var(--bad); }
+.warn.info { background: var(--info-soft); }
+.warn.info::before { background: var(--muted); }
+.ok { font-size: 13.5px; color: var(--good); margin-top: 12px; }
+.out-actions { display: grid; gap: 8px; }
+.out-actions .btn { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.out-actions .btn span:last-child { font-family: var(--mono); font-size: 12px; opacity: .8; }
+.status { font-size: 13px; color: var(--muted); min-height: 1.3em; }
+.prog { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.prog > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.small-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.small-actions .btn { font-size: 13px; padding: 5px 10px; }
+
+@media (max-width: 860px) {
+  .legend { display: none; }
+  .fig .v { font-size: 14px; }
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .rail { max-height: none; order: 2; }
+  .stage { order: 1; grid-template-rows: 58vh auto; }
+  .results { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Ute Dog Cage Builder</h1>
+      <div class="sub"><span id="hdr-mat">Steel</span> SHS dog cages, <b id="hdr-layout">2 x 2</b> on the tray. Change a setting and the model, cut list and drawings follow.</div>
+    </div>
+  </header>
+
+  <div class="work">
+    <aside class="rail" aria-label="Settings">
+      <details class="grp" open>
+        <summary>Layout <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="field"><div><span class="lbl">Rows of 2 dogs</span><small>Modules front to back. Each row holds two dogs side by side.</small></div>
+            <div class="stepper"><button type="button" id="rows-dec" aria-label="Fewer rows">&minus;</button><output id="rows-out">2</output><button type="button" id="rows-inc" aria-label="More rows">+</button></div></div>
+          <div class="field"><label for="width">Overall width, across ute</label><div class="num"><input id="width" type="number" min="700" max="2400" step="10" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="depth">Each row, along ute</label><div class="num"><input id="depth" type="number" min="350" max="1200" step="10" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="height">Height (frame)</label><div class="num"><input id="height" type="number" min="400" max="1200" step="10" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><div><label for="trayWidth">Tray width</label><small>Used for the fit check only.</small></div><div class="num"><input id="trayWidth" type="number" min="500" max="3000" step="10" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="trayLength">Tray length available</label><div class="num"><input id="trayLength" type="number" min="500" max="4000" step="10" inputmode="numeric"><span>mm</span></div></div>
+        </div>
+      </details>
+      <details class="grp" open>
+        <summary>Doors <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="hint">Which edge each door hangs from. Row A is behind the cab. A door hinged on its rear edge can be blown open by the wind if its latch lets go while driving.</div>
+          <div class="hinge-grid" id="hinge-grid"></div>
+          <div class="row-btns"><button type="button" class="btn" id="hinge-all-rear">All hinged at rear</button><button type="button" class="btn" id="hinge-all-front">All hinged at front</button></div>
+          <div class="field"><label for="doorGap">Gap round each door</label><div class="num"><input id="doorGap" type="number" min="2" max="8" step="1" inputmode="numeric"><span>mm</span></div></div>
+        </div>
+      </details>
+      <details class="grp" open>
+        <summary>Walls <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="field"><label for="wallFront">Front face, toward cab</label><select id="wallFront"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option><option value="mesh">Weldmesh</option></select></div>
+          <div class="field"><label for="wallMiddle">Between rows</label><select id="wallMiddle"><option value="perforated">Sheet with air holes</option><option value="solid">Solid sheet</option><option value="mesh">Weldmesh</option></select></div>
+          <div class="field"><label for="wallRear">Rear face, toward tailgate</label><select id="wallRear"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option><option value="mesh">Weldmesh</option></select></div>
+          <div class="field"><label for="divider">Between the two dogs</label><select id="divider"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option></select></div>
+          <div class="field"><label for="holeD">Air hole size</label><div class="num"><input id="holeD" type="number" min="10" max="80" step="1" inputmode="numeric"><span>Ø mm</span></div></div>
+          <div class="field"><label for="holePitch">Air hole spacing</label><div class="num"><input id="holePitch" type="number" min="20" max="250" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="holeMargin">Plain border round holes</label><div class="num"><input id="holeMargin" type="number" min="5" max="200" step="5" inputmode="numeric"><span>mm</span></div></div>
+        </div>
+      </details>
+      <details class="grp" open>
+        <summary>Materials <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="field"><div><span class="lbl">SHS frame and doors</span><small>Door mesh, tabs and hinges follow it so they can be welded on.</small></div>
+            <div class="seg" role="group" aria-label="Frame material" data-mat="frameMat"><button type="button" data-v="steel" aria-pressed="true">Steel</button><button type="button" data-v="aluminium" aria-pressed="false">Aluminium</button></div></div>
+          <div class="field"><div><span class="lbl">Sheets</span><small>Floor, roof, walls and divider.</small></div>
+            <div class="seg" role="group" aria-label="Sheet material" data-mat="sheetMat"><button type="button" data-v="steel" aria-pressed="true">Steel</button><button type="button" data-v="aluminium" aria-pressed="false">Aluminium</button></div></div>
+          <div class="hint" id="mat-note"></div>
+        </div>
+      </details>
+      <details class="grp">
+        <summary>Sizes <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="field"><label for="shs">SHS size</label><select id="shs"><option value="20">20 x 20</option><option value="25">25 x 25</option><option value="30">30 x 30</option><option value="35">35 x 35</option><option value="40">40 x 40</option></select></div>
+          <div class="field"><label for="shsT">SHS wall</label><select id="shsT"><option value="1.6">1.6</option><option value="2">2.0</option><option value="2.5">2.5</option><option value="3">3.0</option></select></div>
+          <div class="field"><label for="tSheet">Wall and divider sheet</label><div class="num"><input id="tSheet" type="number" min="0.8" max="4" step="0.1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><label for="tRoof">Roof sheet</label><div class="num"><input id="tRoof" type="number" min="0.8" max="4" step="0.1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><label for="tFloor">Floor sheet</label><div class="num"><input id="tFloor" type="number" min="1" max="5" step="0.1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><label for="joists">Floor joists per dog</label><div class="num"><input id="joists" type="number" min="0" max="6" step="1" inputmode="numeric"><span>no.</span></div></div>
+          <div class="field"><label for="roofBars">Roof bars per dog</label><div class="num"><input id="roofBars" type="number" min="0" max="4" step="1" inputmode="numeric"><span>no.</span></div></div>
+          <div class="field"><label for="meshPitch">Mesh opening</label><div class="num"><input id="meshPitch" type="number" min="20" max="150" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="meshWire">Mesh wire</label><div class="num"><input id="meshWire" type="number" min="2" max="8" step="0.5" inputmode="decimal"><span>Ø mm</span></div></div>
+        </div>
+      </details>
+      <details class="grp">
+        <summary>Mounting and stock <i class="chev"></i></summary>
+        <div class="grp-body">
+          <label class="check"><input type="checkbox" id="trayBolts"> Bolt each row to the tray (4 bolts)</label>
+          <div class="field"><label for="trayBoltInset">Tray bolts in from front and rear</label><div class="num"><input id="trayBoltInset" type="number" min="40" max="400" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <label class="check"><input type="checkbox" id="joinBolts"> Bolt rows together (2 x M10 at each joint)</label>
+          <div class="field"><label for="joinBoltInset">Join bolts in from the sides</label><div class="num"><input id="joinBoltInset" type="number" min="60" max="600" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="stockLength">SHS bar length</label><div class="num"><input id="stockLength" type="number" min="3000" max="12000" step="100" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="sheetW">Sheet size</label><div style="display:flex;gap:6px"><div class="num"><input id="sheetW" type="number" min="500" max="6000" step="100" inputmode="numeric" style="width:62px"></div><div class="num"><input id="sheetH" type="number" min="500" max="3000" step="100" inputmode="numeric" style="width:62px"><span>mm</span></div></div></div>
+        </div>
+      </details>
+      <div class="grp-body" style="padding-top:12px">
+        <div class="small-actions">
+          <button type="button" class="btn" id="save-json">Save settings</button>
+          <button type="button" class="btn" id="load-json">Load settings</button>
+          <button type="button" class="btn" id="reset">Reset to the 2 x 2 design</button>
+          <input type="file" id="load-file" accept="application/json,.json" hidden>
+        </div>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="viewer" id="viewer">
+        <div class="tools">
+          <div class="seg" role="group" aria-label="View">
+            <button type="button" data-view="iso" aria-pressed="true">3D</button>
+            <button type="button" data-view="rear" aria-pressed="false">Rear 3D</button>
+            <button type="button" data-view="side" aria-pressed="false">Side</button>
+            <button type="button" data-view="front" aria-pressed="false">Front</button>
+            <button type="button" data-view="top" aria-pressed="false">Top</button>
+          </div>
+          <div class="chips" role="group" aria-label="Show">
+            <label><input type="checkbox" id="v-roof" checked> Roof</label>
+            <label><input type="checkbox" id="v-doors"> Doors open</label>
+            <label><input type="checkbox" id="v-explode"> Pulled apart</label>
+            <label><input type="checkbox" id="v-marks"> Frame marks</label>
+          </div>
+        </div>
+        <div class="vbar">
+          <div class="legend" id="legend">Drag to turn, scroll or pinch to zoom, right-drag to pan</div>
+          <div class="front-tag" id="front-tag"></div>
+        </div>
+      </div>
+      <div class="results">
+        <div class="card">
+          <h2>This design</h2>
+          <div class="figs" id="figs"></div>
+          <div id="warns"></div>
+        </div>
+        <div class="card">
+          <h2>Files</h2>
+          <div class="out-actions">
+            <button type="button" class="btn primary" id="dl-pdf"><span>Drawings, A3 PDF</span><span>5 sheets</span></button>
+            <button type="button" class="btn" id="dl-step"><span>3D model, STEP</span><span id="step-size">AP214</span></button>
+            <div class="prog" aria-hidden="true"><i id="prog"></i></div>
+            <div class="status" id="status" role="status"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

@@ -1,0 +1,15 @@
+{
+  "name": "ute-dog-cage-builder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Parametric steel or aluminium dog cages for a ute tray: live 3D model, A3 drawing set and STEP export in one HTML page.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test/browser_test.js default alu_all mixed_alu_sheets"
+  },
+  "devDependencies": {
+    "jspdf": "2.5.1",
+    "playwright-core": "1.47.2",
+    "three": "0.128.0"
+  }
+}
