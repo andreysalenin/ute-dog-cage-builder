@@ -11,7 +11,16 @@ const guard = (js, name) => {
   return js;
 };
 
-const page = rd('src/page.html');
+// version label: build date and a short hash of the sources, shown at the bottom of the settings
+const crypto = require('crypto');
+const BUILD = (() => {
+  const h = crypto.createHash('sha1');
+  for (const f of ['src/page.html', 'src/core.js', 'src/viewer.js', 'src/drawings.js', 'src/app.js']) h.update(rd(f));
+  const d = new Date();
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+  return `${h.digest('hex').slice(0, 7)}, built ${d.getUTCDate()} ${mon} ${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+})();
+const page = rd('src/page.html').replace('__BUILD__', BUILD);
 const cut = page.indexOf('</style>') + '</style>'.length;
 const headPart = page.slice(0, cut).trim();
 const bodyPart = page.slice(cut).trim();

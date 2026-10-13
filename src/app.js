@@ -2,8 +2,8 @@
 (function () {
 'use strict';
 const C = window.CageCore, V = window.CageViewer;
-const LS_KEY = 'ute-dog-cage-builder.v1';
-const LS_SIZES = 'ute-dog-cage-builder.sizes.v1';  // sizes last used with each material
+const LS_KEY = 'ute-dog-cage-builder.v2';
+const LS_OLD = ['ute-dog-cage-builder.v1', 'ute-dog-cage-builder.sizes.v1']; // saved by earlier versions of the page
 const LS_VIEW = 'ute-dog-cage-builder.view.v1';    // viewer toggles
 const $ = (id) => document.getElementById(id);
 
@@ -11,7 +11,8 @@ const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'door
   'tSheet', 'tRoof', 'tFloor', 'joists', 'roofBars', 'meshPitch', 'meshWire', 'trayBoltInset', 'joinBoltInset', 'stockLength', 'sheetW', 'sheetH'];
 const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
 const CHK_FIELDS = ['trayBolts', 'joinBolts'];
-const SIZE_KEYS = { frame: ['shs', 'shsT', 'frameKind'], sheet: ['tSheet', 'tRoof', 'tFloor', 'floorType', 'sheetKind'] };
+// sizes the page used for every material before aluminium got its own (used to spot old saved settings)
+const OLD_SIZES = { frame: { shs: 25, shsT: 2.0 }, sheet: { tSheet: 1.6, tRoof: 1.6, tFloor: 2.0 } };
 
 function defaults() { return JSON.parse(JSON.stringify(C.DEFAULTS)); }
 // accept only known keys from a saved or loaded settings object
@@ -32,12 +33,35 @@ function sanitize(obj) {
 }
 const readLS = (k) => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (e) { return null; } };
 const writeLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } };
-function loadSaved() { try { const s = readLS(LS_KEY); if (s) return sanitize(s); } catch (e) { /* bad data */ } return null; }
+const dropLS = (k) => { try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ } };
+// Settings from before aluminium had its own sizes kept the steel sizes for aluminium. Give an
+// aluminium frame or aluminium sheets still on those old sizes the usual aluminium sizes instead.
+function upgradeSizes(p) {
+  const done = [];
+  const same = (which) => Object.entries(OLD_SIZES[which]).every(([k, v]) => Math.abs(Number(p[k]) - v) < 1e-9);
+  if (p.frameMat === 'aluminium' && same('frame')) { Object.assign(p, C.MAT_DEFAULTS.frame.aluminium); done.push('frame'); }
+  if (p.sheetMat === 'aluminium' && same('sheet')) { Object.assign(p, C.MAT_DEFAULTS.sheet.aluminium); done.push('sheets'); }
+  return done;
+}
+function upgradeNote(done, from) {
+  if (!done.length) return '';
+  const what = [done.includes('frame') ? 'the frame to 40 x 40 x 2.0 SHS' : '', done.includes('sheets') ? 'the sheets to 2.0, with a 3.0 tread-plate floor' : ''].filter(Boolean).join(' and ');
+  return `${from} came from before aluminium had its own sizes, so the aluminium was set to the usual aluminium sizes: ${what}.`;
+}
+let loadNote = '';
+function loadSaved() {
+  try {
+    const s = readLS(LS_KEY);
+    if (s) return sanitize(s);
+    const old = readLS(LS_OLD[0]);
+    if (old) { const p = sanitize(old); loadNote = upgradeNote(upgradeSizes(p), 'Your saved settings'); return p; }
+  } catch (e) { /* bad data */ }
+  return null;
+}
 function save() { writeLS(LS_KEY, params); }
 
 let params = loadSaved() || defaults();
-let sizes = readLS(LS_SIZES) || { frame: {}, sheet: {} };
-if (!sizes.frame || !sizes.sheet) sizes = { frame: {}, sheet: {} };
+for (const k of LS_OLD) dropLS(k);
 let model = null, summary = null;
 let viewer = null;
 let matMsg = '';
@@ -97,22 +121,20 @@ function hingeGrid() {
   }
   g.innerHTML = html;
 }
-// switching a material brings back the sizes last used with it (or that material's usual sizes)
+// switching a material always sets that material's usual sizes and its first grade
 function switchMaterial(which, mat) {
-  const key = which + 'Mat', old = params[key];
-  if (old === mat) return;
+  const key = which + 'Mat';
+  if (params[key] === mat) return;
   readInputs();
-  sizes[which][old] = Object.fromEntries(SIZE_KEYS[which].map(k => [k, params[k]]));
   params[key] = mat;
-  const back = sizes[which][mat];
-  const use = Object.assign({}, C.MAT_DEFAULTS[which][mat], back || {});
-  if (!back) use[which + 'Kind'] = C.KINDS[which][mat][0].id;
-  Object.assign(params, use);
-  writeLS(LS_SIZES, sizes);
+  Object.assign(params, C.MAT_DEFAULTS[which][mat]);
+  params[which + 'Kind'] = C.KINDS[which][mat][0].id;
   const word = mat === 'aluminium' ? 'aluminium' : 'steel';
-  matMsg = which === 'frame' ? `${back ? 'Back to your' : 'Usual'} ${word} frame: SHS ${params.shs} x ${params.shs} x ${Number(params.shsT).toFixed(1)}.`
-    : `${back ? 'Back to your' : 'Usual'} ${word} sheets: walls ${Number(params.tSheet).toFixed(1)}, roof ${Number(params.tRoof).toFixed(1)}, floor ${Number(params.tFloor).toFixed(1)} ${params.floorType === 'tread' ? 'tread plate' : 'sheet'}.`;
+  matMsg = which === 'frame' ? `Usual ${word} frame set: SHS ${params.shs} x ${params.shs} x ${Number(params.shsT).toFixed(1)}.`
+    : `Usual ${word} sheets set: walls ${Number(params.tSheet).toFixed(1)}, roof ${Number(params.tRoof).toFixed(1)}, floor ${Number(params.tFloor).toFixed(1)} ${params.floorType === 'tread' ? 'tread plate' : 'sheet'}.`;
   fillInputs();
+  save(); // keep the switch even if the page is closed before the model rebuilds
+  if (loadNote && $('status').textContent === loadNote) status('');
 }
 
 /* ---------------------------------------------------------------- rebuild */
@@ -310,7 +332,13 @@ function bind() {
   $('load-json').addEventListener('click', () => $('load-file').click());
   $('load-file').addEventListener('change', async (e) => {
     const f = e.target.files[0]; if (!f) return;
-    try { params = sanitize(JSON.parse(await f.text())); matMsg = ''; fillInputs(); hingeGrid(); rebuild(false); status('Settings loaded.'); }
+    try {
+      const raw = JSON.parse(await f.text());
+      params = sanitize(raw);
+      // files saved before the grades existed have no frameKind: their aluminium may still be on the old sizes
+      const note = raw && !('frameKind' in raw) ? upgradeNote(upgradeSizes(params), 'This file') : '';
+      matMsg = ''; fillInputs(); hingeGrid(); rebuild(false); status(note ? 'Settings loaded. ' + note : 'Settings loaded.');
+    }
     catch (err) { status('That file is not a saved settings file from this page.'); }
     e.target.value = '';
   });
@@ -332,6 +360,7 @@ function start() {
   rebuild(false);
   bind();
   if (viewer) viewer.view('iso');
+  if (loadNote) status(loadNote);
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
