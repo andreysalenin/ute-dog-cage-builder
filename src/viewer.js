@@ -190,7 +190,7 @@ function shadowTexture() {
 function uteLayout(P, G) {
   const TW = P.trayWidth, TL = P.trayLength;
   const cx = P.width / 2;
-  const yH = G.Ltot + 2;                   // inside face of the headboard
+  const yH = G.Ltot + Math.max(P.trayGapFront || 0, 1); // inside face of the headboard (1 mm off the cages when they touch)
   const yR = yH - TL;                      // rear edge of the tray
   const cab = TL <= 1950 ? 'dual' : TL <= 2250 ? 'extra' : 'single';
   const cabin = { single: 850, extra: 1350, dual: 1900 }[cab]; // roof length: puts the rear axle about where a real one sits
@@ -403,7 +403,7 @@ class CageScene {
   updateExtras() {
     const o = this.opts, m = this.model;
     const want = m && (o.tray || o.ute) && !o.exploded;
-    const key = want ? JSON.stringify([o.tray, o.ute, m.P.trayWidth, m.P.trayLength, m.P.width, m.G.Ltot, m.P.height + m.P.tRoof]) : '';
+    const key = want ? JSON.stringify([o.tray, o.ute, m.P.trayWidth, m.P.trayLength, m.P.trayGapFront, m.P.width, m.G.Ltot, m.P.height + m.P.tRoof]) : '';
     if (key !== this.extrasKey) {
       for (const c of this.extras.children.slice()) { this.extras.remove(c); c.traverse(q => { if (q.geometry) q.geometry.dispose(); if (q.material) { if (q.material.map && q.material.map !== TREAD_TEX) q.material.map.dispose(); q.material.dispose(); } }); }
       if (want) this.extras.add(buildUte(m.P, m.G, { tray: true, body: !!o.ute, textures: this.textures }));

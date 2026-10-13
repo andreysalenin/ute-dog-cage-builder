@@ -182,7 +182,11 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
           <div class="field"><label for="height">Height (frame)</label><div class="num"><input id="height" type="number" min="400" max="1200" step="10" inputmode="numeric"><span>mm</span></div></div>
           <div class="sub-hd"><span>Tray</span><button type="button" class="lock" id="lock-tray" data-lock="tray" aria-pressed="true" title="Fit keeps the locked sizes and changes the others"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path class="shut" d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/><path class="open" d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg><span class="lock-txt">Locked</span></button></div>
           <div class="field" data-set="tray"><label for="trayWidth">Tray width</label><div class="num"><input id="trayWidth" type="number" min="500" max="3000" step="10" inputmode="numeric"><span>mm</span></div></div>
-          <div class="field" data-set="tray"><div><label for="trayLength">Tray length for the cages</label><small>Headboard to the tail.</small></div><div class="num"><input id="trayLength" type="number" min="500" max="4000" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field" data-set="tray"><div><label for="trayLength">Tray length</label><small>Headboard to the tail.</small></div><div class="num"><input id="trayLength" type="number" min="500" max="4000" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="sub-hd"><span>Clearances on the tray</span></div>
+          <div class="field"><div><label for="trayGapSide">Each side</label><small id="side-note">Tray edge to the cage side.</small></div><div class="num"><input id="trayGapSide" type="number" min="0" max="500" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><div><label for="trayGapFront">Headboard to cages</label><small>Front of the tray to the front of the cages.</small></div><div class="num"><input id="trayGapFront" type="number" min="0" max="2000" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><div><label for="trayGapRear">Cages to tail</label><small>Back of the cages to the back of the tray, kept free.</small></div><div class="num"><input id="trayGapRear" type="number" min="0" max="2000" step="5" inputmode="numeric"><span>mm</span></div></div>
           <div class="fit-row">
             <button type="button" class="btn" id="fit"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5V2h3.5M14 5.5V2h-3.5M2 10.5V14h3.5M14 10.5V14h-3.5"/><path d="M5.5 8h5M8 5.5v5"/></svg><span id="fit-txt">Fit cages to tray</span></button>
             <div class="hint" id="fit-note"></div>
@@ -256,7 +260,7 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
           <button type="button" class="btn" id="reset">Reset to the 2 x 2 design</button>
           <input type="file" id="load-file" accept="application/json,.json" hidden>
         </div>
-        <div class="hint" id="build-tag">Version fe3836a, built 13 Oct 2026 18:54 UTC</div>
+        <div class="hint" id="build-tag">Version b319860, built 13 Oct 2026 19:07 UTC</div>
       </div>
     </aside>
 
@@ -727,8 +731,11 @@ const DEFAULTS = {
   width: 1700,           // overall width across the ute
   depth: 550,            // each module (compartment length) along the ute
   height: 750,           // frame height (roof sheet sits on top)
-  trayWidth: 1900,       // for the fit check only
-  trayLength: 1800,
+  trayWidth: 1900,       // tray deck width
+  trayLength: 1800,      // headboard to the tail
+  trayGapSide: 100,      // tray edge to the side of the cages, each side
+  trayGapFront: 0,       // headboard (front of the tray) to the front of the cages
+  trayGapRear: 0,        // back of the cages to the tail (back of the tray), kept free
   shs: 25, shsT: 2.0,    // SHS size and wall
   frameMat: 'steel',     // SHS frame, doors, tabs, mesh, hinges: steel | aluminium
   sheetMat: 'steel',     // floor, roof, walls, divider: steel | aluminium
@@ -840,6 +847,7 @@ function normParams(p) {
   num('rows', 1, 6); P.rows = Math.round(P.rows);
   num('width', 700, 2400); num('depth', 350, 1200); num('height', 400, 1200);
   num('trayWidth', 500, 3000); num('trayLength', 500, 4000);
+  num('trayGapSide', 0, 500); num('trayGapFront', 0, 2000); num('trayGapRear', 0, 2000);
   num('shs', 20, 50); num('shsT', 1.2, 4); num('tFloor', 1, 5); num('tSheet', 0.8, 4); num('tRoof', 0.8, 4);
   num('holeD', 10, 80); num('holePitch', 20, 250); num('holeMargin', 5, 200);
   num('meshPitch', 20, 150); num('meshWire', 2, 8); num('meshEdge', 5, 100);
@@ -1650,11 +1658,17 @@ function summary(model) {
   }
   const warnings = [];
   const total = G.Ltot;
-  if (total > P.trayLength + 0.5) warnings.push({ level: 'bad', text: `The cages are ${fmt0(total)} long, ${fmt0(total - P.trayLength)} more than the tray length you entered.` });
+  // on the tray: the cages sit trayGapFront from the headboard, centred across the width
+  const front = P.trayGapFront, behind = P.trayLength - front - total; // tray left behind the cages
+  if (behind < -0.5) warnings.push({ level: 'bad', text: front > 0
+    ? `The cages are ${fmt0(total)} long but only ${fmt0(P.trayLength - front)} of tray is left after the ${fmt0(front)} at the headboard, so they hang ${fmt0(-behind)} past the tail.`
+    : `The cages are ${fmt0(total)} long, ${fmt0(total - P.trayLength)} more than the tray length you entered.` });
+  else if (behind < P.trayGapRear - 0.5) warnings.push({ level: 'warn', text: `Only ${fmt0(behind)} of tray is left behind the cages, less than the ${fmt0(P.trayGapRear)} you asked for.` });
   const stickOut = Math.max(-xmin, xmax - P.width);
   const sideRoom = (P.trayWidth - P.width) / 2;
-  if (sideRoom < 0) warnings.push({ level: 'bad', text: `The cages are ${Math.round(-2 * sideRoom)} wider than the tray.` });
-  else if (sideRoom < stickOut) warnings.push({ level: 'warn', text: `Hinges and latches stick out ${Math.round(stickOut)} past the cage ends but only ${Math.round(sideRoom)} is left to the tray edge.` });
+  if (sideRoom < 0) warnings.push({ level: 'bad', text: `The cages are ${fmt0(-2 * sideRoom)} wider than the tray.` });
+  else if (sideRoom < stickOut) warnings.push({ level: 'warn', text: `Hinges and latches stick out ${Math.round(stickOut)} past the cage ends but only ${fmt0(sideRoom)} is left to the tray edge.` });
+  else if (sideRoom < P.trayGapSide - 0.5) warnings.push({ level: 'warn', text: `Only ${fmt0(sideRoom)} each side to the tray edge, less than the ${fmt0(P.trayGapSide)} you asked for.` });
   if (P.joinBoltsDropped) warnings.push({ level: 'warn', text: 'No room for join bolts between the roof bars, so the rows are not bolted together. Use fewer roof bars or clamp the rows.' });
   if (P.holePitchWanted) warnings.push({ level: 'warn', text: `Air holes spaced at ${Math.round(P.holePitch)} instead of ${Math.round(P.holePitchWanted)}, to keep the hole count under ${MAX_HOLES}.` });
   if (G.hingeReach < 1) warnings.push({ level: 'warn', text: `The ${G.hingeD} mm hinge barrels barely reach past the tube corners with a ${P.doorGap} mm door gap. Use a smaller gap or bigger hinges.` });
@@ -1708,7 +1722,7 @@ function summary(model) {
     bom: b, bars, shsMetres, nests, masses: m, perModule: mods.map(k => m[k]),
     total: Object.values(m).reduce((a, c) => a + c, 0), byMat, massIf, frameAdvice,
     overall: { x0: xmin, x1: xmax, w: P.width, l: total, h: P.height + P.tRoof },
-    trayPlan: { headY: total, rearY: total - P.trayLength, spare: P.trayLength - total },
+    trayPlan: { headY: total + front, rearY: total + front - P.trayLength, front, behind },
     stickOut, sideRoom, warnings,
   };
 }
@@ -2139,7 +2153,7 @@ function shadowTexture() {
 function uteLayout(P, G) {
   const TW = P.trayWidth, TL = P.trayLength;
   const cx = P.width / 2;
-  const yH = G.Ltot + 2;                   // inside face of the headboard
+  const yH = G.Ltot + Math.max(P.trayGapFront || 0, 1); // inside face of the headboard (1 mm off the cages when they touch)
   const yR = yH - TL;                      // rear edge of the tray
   const cab = TL <= 1950 ? 'dual' : TL <= 2250 ? 'extra' : 'single';
   const cabin = { single: 850, extra: 1350, dual: 1900 }[cab]; // roof length: puts the rear axle about where a real one sits
@@ -2352,7 +2366,7 @@ class CageScene {
   updateExtras() {
     const o = this.opts, m = this.model;
     const want = m && (o.tray || o.ute) && !o.exploded;
-    const key = want ? JSON.stringify([o.tray, o.ute, m.P.trayWidth, m.P.trayLength, m.P.width, m.G.Ltot, m.P.height + m.P.tRoof]) : '';
+    const key = want ? JSON.stringify([o.tray, o.ute, m.P.trayWidth, m.P.trayLength, m.P.trayGapFront, m.P.width, m.G.Ltot, m.P.height + m.P.tRoof]) : '';
     if (key !== this.extrasKey) {
       for (const c of this.extras.children.slice()) { this.extras.remove(c); c.traverse(q => { if (q.geometry) q.geometry.dispose(); if (q.material) { if (q.material.map && q.material.map !== TREAD_TEX) q.material.map.dispose(); q.material.dispose(); } }); }
       if (want) this.extras.add(buildUte(m.P, m.G, { tray: true, body: !!o.ute, textures: this.textures }));
@@ -3165,20 +3179,21 @@ function pageOverview(doc, M, S, I, info) {
   // layout schematic, with the tray: cages pushed up to the headboard
   let ys = yb - 11;
   s.text(x0, ys, 'LAYOUT FROM ABOVE, ON THE TRAY', { size: 8, weight: 'bold' });
-  s.text(x0, ys - 4, `Tray ${f0(P.trayWidth)} wide, ${f0(P.trayLength)} from the headboard to the tail`, { size: 6, color: GREY });
-  const Lt = G.Ltot, TL = P.trayLength;
+  const Lt = G.Ltot, TL = P.trayLength, fGap = P.trayGapFront;
+  const headY = Lt + fGap, rearY = headY - TL, behind = TL - fGap - Lt; // the cages sit fGap from the headboard
+  s.text(x0, ys - 4, `Tray ${f0(P.trayWidth)} x ${f0(TL)} (headboard to tail); cages ${f0(fGap)} from the headboard, ` + (behind >= -0.5 ? `${f0(behind)} left behind` : `${f0(-behind)} past the tail`), { size: 6, color: behind >= -0.5 ? GREY : ACC });
   const room = (P.trayWidth - P.width) / 2;
   const ext = Math.max(room, G.doorW) + 10;          // door swings (or tray edge) beyond the cage sides
   const boxW = 112, boxH = Math.max(28, ys - 8 - 98);
   const spanW = P.width + 2 * ext + 150;               // + room for the length dimension on the right
-  const yLow = Math.min(0, Lt - TL);                   // tail of the tray (or of the cages if they overhang)
-  const k = Math.min(boxW / spanW, boxH / (Lt - yLow + 380));
-  const ox = x0 + (114 - spanW * k) / 2 + ext * k, oy = ys - 14 - Lt * k - 6;
+  const yLow = Math.min(0, rearY);                     // tail of the tray (or of the cages if they overhang)
+  const k = Math.min(boxW / spanW, boxH / (headY - yLow + 380));
+  const ox = x0 + (114 - spanW * k) / 2 + ext * k, oy = ys - 14 - headY * k - 6;
   const Pp = (X, Yy) => [ox + X * k, oy + Yy * k];
   { // tray outline and headboard
-    const a = Pp(-room, Lt - TL), b = Pp(P.width + room, Lt);
+    const a = Pp(-room, rearY), b = Pp(P.width + room, headY);
     s.rect(a[0], a[1], b[0] - a[0], b[1] - a[1], { lw: 0.25, color: GREY, dash: [1.2, 0.8] });
-    const h0 = Pp(-room, Lt), h1 = Pp(P.width + room, Lt + 50);
+    const h0 = Pp(-room, headY), h1 = Pp(P.width + room, headY + 50);
     s.rect(h0[0], h0[1], h1[0] - h0[0], Math.max(0.6, h1[1] - h0[1]), { fill: LIGHT, lw: 0.2, color: GREY });
   }
   for (let i = 0; i < N; i++) {
@@ -3217,15 +3232,17 @@ function pageOverview(doc, M, S, I, info) {
       s.line([hp[0], hp[0] + dirOut * rr], [hp[1], hp[1]], { lw: 0.35, color: ACC });
     }
   }
-  const fa = Pp(P.width / 2, Lt + 140);
+  const fa = Pp(P.width / 2, headY + 140);
   s.arrow([fa[0], fa[1] + 4], [0, 1], { L: 2.6, W: 1.2 });
   s.line([fa[0], fa[0]], [fa[1], fa[1] + 2], { lw: 0.35 });
   s.text(fa[0] + 3, fa[1] + 1.6, 'FRONT (cab)', { size: 6, weight: 'bold', va: 'middle' });
   { const a = Pp(0, yLow), b = Pp(P.width, yLow); s.dim(a, b, a[1] - 6.5, 'h', f0(P.width), { size: 6 }); }
   if (room > 0) { const a = Pp(-room, yLow), b = Pp(0, yLow); s.dim(a, b, a[1] - 2.8, 'h', f0(room), { size: 5.4 }); const c = Pp(P.width, yLow), d = Pp(P.width + room, yLow); s.dim(c, d, c[1] - 2.8, 'h', f0(room), { size: 5.4 }); }
-  { const xd = Pp(P.width + ext + 45, 0)[0];
+  { // along the tray: tail to the cages, the cages, the cages to the headboard
+    const xd = Pp(P.width + ext + 45, 0)[0];
     const a = Pp(P.width, 0), b = Pp(P.width, Lt); s.dim(a, b, xd, 'v', f0(Lt), { size: 5.8 });
-    if (Math.abs(TL - Lt) > 1) { const c = Pp(P.width, Lt - TL); s.dim(c, a, xd, 'v', TL > Lt ? `${f0(TL - Lt)} spare` : `${f0(Lt - TL)} over`, { size: 5.4, color: TL > Lt ? GREY : ACC, side: 'start' }); } }
+    if (fGap > 1) s.dim(b, Pp(P.width, headY), xd, 'v', f0(fGap), { size: 5.4, color: GREY, side: 'end' });
+    if (Math.abs(behind) > 1) { const c = Pp(P.width, rearY); s.dim(c, a, xd, 'v', behind > 0 ? `${f0(behind)} behind` : `${f0(-behind)} over`, { size: 5.4, color: behind > 0 ? GREY : ACC, side: 'start' }); } }
   // legend
   let ly = Pp(0, yLow)[1] - 15;
   const lg = [[{ lw: 0.8, color: INK }, 'solid wall'], [{ lw: 0.7, color: INK, dash: [1.4, 0.7] }, 'air holes'], [{ lw: 0.7, color: GREY, dash: [0.3, 0.8] }, 'mesh'], [{ lw: 1.0, color: ACC }, 'door + swing']];
@@ -3338,7 +3355,8 @@ function pageGA(doc, M, S, I, info) {
   const notes = [
     first,
     (P.trayBolts && G.trayBoltJoist ? `Each row bolts to the tray with 4 x M${G.trayBoltD} (sheet 3).` : (P.trayBolts ? 'No tray bolts: with no floor joists there is nothing for them to pass through, so tie each row down your own way.' : 'Tray bolts are turned off: tie the cages down your own way.')) + (G.bolted ? ` Neighbouring rows bolt together through the top rails${G.plateT ? ' and the sheet between them' : ''} with 2 x M10 x ${G.joinBoltL}.` : ''),
-    `Hinge barrels stick out ${f0(G.hingeD)} beyond the cage ends and latches about ${Math.round(S.stickOut)} (${Math.round(S.stickOut + 7)} with the handle lifted). ` + ((P.trayWidth - L) / 2 >= 0 ? `You allowed ${f0((P.trayWidth - L) / 2)} each side to the tray edge.` : `The cages are ${f0(L - P.trayWidth)} wider than the tray you entered.`),
+    `Hinge barrels stick out ${f0(G.hingeD)} beyond the cage ends and latches about ${Math.round(S.stickOut)} (${Math.round(S.stickOut + 7)} with the handle lifted). ` + ((P.trayWidth - L) / 2 >= 0 ? `On the tray there is ${f0((P.trayWidth - L) / 2)} each side to the tray edge` : `The cages are ${f0(L - P.trayWidth)} wider than the tray you entered`)
+      + `; the cages sit ${f0(P.trayGapFront)} from the headboard with ${S.trayPlan.behind >= -0.5 ? `${f0(S.trayPlan.behind)} of tray behind them` : `${f0(-S.trayPlan.behind)} hanging past the tail`}.`,
     `Each door is ${f0(G.doorW)} wide and needs about ${f0(G.doorW + 30)} clear beside the cage to swing open. Check it clears any canopy side frame and gull-wing seals.`,
     `Overall height is ${f0(H + P.tRoof)} including the roof sheet. Check canopy, rack or headboard clearance.`,
     `Clear inside each compartment: ${f0(G.clearL)} long x ${f0(G.clearW)} wide x ${f0(G.clearH)} high under the top frame. Check your biggest dog can stand with its head up, turn round and lie flat.`,
@@ -3997,7 +4015,7 @@ const LS_OLD = ['ute-dog-cage-builder.v1', 'ute-dog-cage-builder.sizes.v1']; // 
 const LS_VIEW = 'ute-dog-cage-builder.view.v1';    // viewer toggles
 const $ = (id) => document.getElementById(id);
 
-const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'doorGap', 'holeD', 'holePitch', 'holeMargin',
+const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'trayGapSide', 'trayGapFront', 'trayGapRear', 'doorGap', 'holeD', 'holePitch', 'holeMargin',
   'tSheet', 'tRoof', 'tFloor', 'joists', 'roofBars', 'meshPitch', 'meshWire', 'trayBoltInset', 'joinBoltInset', 'stockLength', 'sheetW', 'sheetH'];
 const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
 const CHK_FIELDS = ['trayBolts', 'joinBolts'];
@@ -4197,42 +4215,48 @@ function renderSummary() {
   const w = s.warnings.filter(x => x.level !== 'info'), info = s.warnings.filter(x => x.level === 'info');
   const item = (x) => `<div class="warn ${x.level === 'bad' ? 'bad' : x.level === 'info' ? 'info' : ''}"><span>${x.text}</span></div>`;
   $('warns').innerHTML = (w.length ? `<div class="warns">${w.map(item).join('')}</div>`
-    : `<div class="ok">Fits the tray you entered, with ${fmt(s.sideRoom)} each side and ${fmt(P.trayLength - s.overall.l)} spare in length.</div>`)
+    : `<div class="ok">Fits the tray you entered: ${fmt(s.sideRoom)} each side, ${fmt(P.trayGapFront)} from the headboard and ${fmt(s.trayPlan.behind)} left behind the cages.</div>`)
     + (info.length ? `<div class="warns">${info.map(item).join('')}</div>` : '');
-  // fit line under the Fit button
-  const spare = P.trayLength - s.overall.l;
-  $('fit-note').textContent = `Cages ${fmt(P.width)} x ${fmt(s.overall.l)} on a ${fmt(P.trayWidth)} x ${fmt(P.trayLength)} tray: ` +
-    (s.sideRoom < 0 ? `${fmt(-2 * s.sideRoom)} too wide` : `${fmt(s.sideRoom)} each side`) + ', ' +
-    (spare < -0.5 ? `${fmt(-spare)} too long.` : `${fmt(Math.max(0, spare))} spare in length.`) +
-    ` Fit keeps the locked sizes and changes the others.`;
+  // fit line under the Fit button, and how far the hinges and latches stick out
+  const behind = s.trayPlan.behind;
+  $('fit-note').textContent = `Now: cages ${fmt(P.width)} x ${fmt(s.overall.l)} on a ${fmt(P.trayWidth)} x ${fmt(P.trayLength)} tray, ` +
+    (s.sideRoom < 0 ? `${fmt(-2 * s.sideRoom)} too wide` : `${fmt(s.sideRoom)} each side`) + `, ${fmt(P.trayGapFront)} at the headboard, ` +
+    (behind < -0.5 ? `${fmt(-behind)} past the tail.` : `${fmt(behind)} behind.`) +
+    ` Fit keeps the locked sizes and the clearances, and changes the others.`;
+  $('side-note').textContent = `Tray edge to the cage side. Hinges and latches stick out about ${Math.round(s.stickOut)}.`;
 }
 
 /* ---------------------------------------------------------------- fit the cages and the tray to each other */
-// room each side of the cages for the hinge barrels and latches
-function sideRoom() { return Math.max(30, Math.ceil((summary.stickOut + 10) / 10) * 10); }
+// The clearances (each side, at the headboard, behind the cages) stay as set; Fit changes the unlocked sizes.
 function fit() {
-  readInputs();
-  const P = model.P, side = sideRoom();
+  clearTimeout(timer); rebuild(true); // start from what is typed in now
+  const P = model.P; // clamped values, including the clearances
+  const side = P.trayGapSide, front = P.trayGapFront, rear = P.trayGapRear;
   const N = params.rows;
   if (params.lock === 'tray') {
-    const W = Math.min(2400, Math.max(700, Math.floor((params.trayWidth - 2 * side) / 10) * 10));
-    const TL = params.trayLength, A = P.shs;
+    const wRaw = P.trayWidth - 2 * side;
+    const W = Math.min(2400, Math.max(700, Math.floor(wRaw)));
+    const avail = P.trayLength - front - rear, A = P.shs;
     const shared = N > 1 && (params.rowJoin === 'shared' || params.rowJoin === 'shared2');
     const plate = N > 1 && params.rowJoin === 'sandwich' && params.wallMiddle !== 'mesh' ? P.tSheet : 0;
     // overall length = N rows minus the shared rails, plus any sheets clamped between rows
-    const raw = shared ? (TL + (N - 1) * A) / N : (TL - (N - 1) * plate) / N;
-    const D = Math.min(1200, Math.max(350, Math.floor(raw / 5) * 5));
+    const raw = shared ? (avail + (N - 1) * A) / N : (avail - (N - 1) * plate) / N;
+    const D = Math.min(1200, Math.max(350, Math.floor(raw)));
     params.width = W; params.depth = D;
     fillInputs(); rebuild(true);
-    let msg = `Cages fitted to the tray: ${fmt(W)} wide (${fmt((params.trayWidth - W) / 2)} each side for the hinges and latches), ${N} ${N === 1 ? 'row' : 'rows'} of ${fmt(D)}.`;
-    if (raw > 1200) msg += ` Rows stop at 1200, so ${fmt(params.trayLength - summary.overall.l)} of the tray is left: add a row?`;
+    let msg = `Cages fitted to the tray: ${fmt(W)} wide, ${N} ${N === 1 ? 'row' : 'rows'} of ${fmt(D)}, ${fmt(summary.overall.l)} long, with ${fmt(summary.sideRoom)} each side, ${fmt(front)} at the headboard and ${fmt(summary.trayPlan.behind)} behind.`;
+    if (wRaw > 2400 || wRaw < 700) msg += ` The width stops at ${wRaw > 2400 ? 'the 2400 maximum' : 'the 700 minimum'}.`;
+    if (raw > 1200) msg += ` Rows stop at 1200, so more of the tray is left behind them: add a row?`;
     else if (raw < 350) msg += ` ${N} rows don't fit at the 350 minimum: try ${Math.max(1, N - 1)}.`;
     status(msg);
   } else {
-    params.trayWidth = Math.min(3000, Math.max(500, Math.ceil((P.width + 2 * side) / 10) * 10));
-    params.trayLength = Math.min(4000, Math.max(500, Math.ceil(model.G.Ltot / 5) * 5));
+    const tw = P.width + 2 * side, tl = model.G.Ltot + front + rear;
+    params.trayWidth = Math.min(3000, Math.max(500, Math.ceil(tw)));
+    params.trayLength = Math.min(4000, Math.max(500, Math.ceil(tl)));
     fillInputs(); rebuild(true);
-    status(`Tray set to the cages: ${fmt(params.trayWidth)} wide (${fmt((params.trayWidth - P.width) / 2)} each side) and ${fmt(params.trayLength)} long.`);
+    let msg = `Tray set to the cages: ${fmt(params.trayWidth)} wide and ${fmt(params.trayLength)} long, for ${fmt(side)} each side, ${fmt(front)} at the headboard and ${fmt(rear)} behind.`;
+    if (tw > 3000 || tl > 4000) msg += ` That is past the ${tw > 3000 ? '3000 width' : '4000 length'} limit, so the tray is cut short.`;
+    status(msg);
   }
   if (viewer && (viewOpts.tray || viewOpts.ute)) viewer.fit();
 }

@@ -10,8 +10,11 @@ const DEFAULTS = {
   width: 1700,           // overall width across the ute
   depth: 550,            // each module (compartment length) along the ute
   height: 750,           // frame height (roof sheet sits on top)
-  trayWidth: 1900,       // for the fit check only
-  trayLength: 1800,
+  trayWidth: 1900,       // tray deck width
+  trayLength: 1800,      // headboard to the tail
+  trayGapSide: 100,      // tray edge to the side of the cages, each side
+  trayGapFront: 0,       // headboard (front of the tray) to the front of the cages
+  trayGapRear: 0,        // back of the cages to the tail (back of the tray), kept free
   shs: 25, shsT: 2.0,    // SHS size and wall
   frameMat: 'steel',     // SHS frame, doors, tabs, mesh, hinges: steel | aluminium
   sheetMat: 'steel',     // floor, roof, walls, divider: steel | aluminium
@@ -123,6 +126,7 @@ function normParams(p) {
   num('rows', 1, 6); P.rows = Math.round(P.rows);
   num('width', 700, 2400); num('depth', 350, 1200); num('height', 400, 1200);
   num('trayWidth', 500, 3000); num('trayLength', 500, 4000);
+  num('trayGapSide', 0, 500); num('trayGapFront', 0, 2000); num('trayGapRear', 0, 2000);
   num('shs', 20, 50); num('shsT', 1.2, 4); num('tFloor', 1, 5); num('tSheet', 0.8, 4); num('tRoof', 0.8, 4);
   num('holeD', 10, 80); num('holePitch', 20, 250); num('holeMargin', 5, 200);
   num('meshPitch', 20, 150); num('meshWire', 2, 8); num('meshEdge', 5, 100);
@@ -933,11 +937,17 @@ function summary(model) {
   }
   const warnings = [];
   const total = G.Ltot;
-  if (total > P.trayLength + 0.5) warnings.push({ level: 'bad', text: `The cages are ${fmt0(total)} long, ${fmt0(total - P.trayLength)} more than the tray length you entered.` });
+  // on the tray: the cages sit trayGapFront from the headboard, centred across the width
+  const front = P.trayGapFront, behind = P.trayLength - front - total; // tray left behind the cages
+  if (behind < -0.5) warnings.push({ level: 'bad', text: front > 0
+    ? `The cages are ${fmt0(total)} long but only ${fmt0(P.trayLength - front)} of tray is left after the ${fmt0(front)} at the headboard, so they hang ${fmt0(-behind)} past the tail.`
+    : `The cages are ${fmt0(total)} long, ${fmt0(total - P.trayLength)} more than the tray length you entered.` });
+  else if (behind < P.trayGapRear - 0.5) warnings.push({ level: 'warn', text: `Only ${fmt0(behind)} of tray is left behind the cages, less than the ${fmt0(P.trayGapRear)} you asked for.` });
   const stickOut = Math.max(-xmin, xmax - P.width);
   const sideRoom = (P.trayWidth - P.width) / 2;
-  if (sideRoom < 0) warnings.push({ level: 'bad', text: `The cages are ${Math.round(-2 * sideRoom)} wider than the tray.` });
-  else if (sideRoom < stickOut) warnings.push({ level: 'warn', text: `Hinges and latches stick out ${Math.round(stickOut)} past the cage ends but only ${Math.round(sideRoom)} is left to the tray edge.` });
+  if (sideRoom < 0) warnings.push({ level: 'bad', text: `The cages are ${fmt0(-2 * sideRoom)} wider than the tray.` });
+  else if (sideRoom < stickOut) warnings.push({ level: 'warn', text: `Hinges and latches stick out ${Math.round(stickOut)} past the cage ends but only ${fmt0(sideRoom)} is left to the tray edge.` });
+  else if (sideRoom < P.trayGapSide - 0.5) warnings.push({ level: 'warn', text: `Only ${fmt0(sideRoom)} each side to the tray edge, less than the ${fmt0(P.trayGapSide)} you asked for.` });
   if (P.joinBoltsDropped) warnings.push({ level: 'warn', text: 'No room for join bolts between the roof bars, so the rows are not bolted together. Use fewer roof bars or clamp the rows.' });
   if (P.holePitchWanted) warnings.push({ level: 'warn', text: `Air holes spaced at ${Math.round(P.holePitch)} instead of ${Math.round(P.holePitchWanted)}, to keep the hole count under ${MAX_HOLES}.` });
   if (G.hingeReach < 1) warnings.push({ level: 'warn', text: `The ${G.hingeD} mm hinge barrels barely reach past the tube corners with a ${P.doorGap} mm door gap. Use a smaller gap or bigger hinges.` });
@@ -991,7 +1001,7 @@ function summary(model) {
     bom: b, bars, shsMetres, nests, masses: m, perModule: mods.map(k => m[k]),
     total: Object.values(m).reduce((a, c) => a + c, 0), byMat, massIf, frameAdvice,
     overall: { x0: xmin, x1: xmax, w: P.width, l: total, h: P.height + P.tRoof },
-    trayPlan: { headY: total, rearY: total - P.trayLength, spare: P.trayLength - total },
+    trayPlan: { headY: total + front, rearY: total + front - P.trayLength, front, behind },
     stickOut, sideRoom, warnings,
   };
 }

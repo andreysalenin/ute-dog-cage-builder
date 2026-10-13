@@ -447,20 +447,21 @@ function pageOverview(doc, M, S, I, info) {
   // layout schematic, with the tray: cages pushed up to the headboard
   let ys = yb - 11;
   s.text(x0, ys, 'LAYOUT FROM ABOVE, ON THE TRAY', { size: 8, weight: 'bold' });
-  s.text(x0, ys - 4, `Tray ${f0(P.trayWidth)} wide, ${f0(P.trayLength)} from the headboard to the tail`, { size: 6, color: GREY });
-  const Lt = G.Ltot, TL = P.trayLength;
+  const Lt = G.Ltot, TL = P.trayLength, fGap = P.trayGapFront;
+  const headY = Lt + fGap, rearY = headY - TL, behind = TL - fGap - Lt; // the cages sit fGap from the headboard
+  s.text(x0, ys - 4, `Tray ${f0(P.trayWidth)} x ${f0(TL)} (headboard to tail); cages ${f0(fGap)} from the headboard, ` + (behind >= -0.5 ? `${f0(behind)} left behind` : `${f0(-behind)} past the tail`), { size: 6, color: behind >= -0.5 ? GREY : ACC });
   const room = (P.trayWidth - P.width) / 2;
   const ext = Math.max(room, G.doorW) + 10;          // door swings (or tray edge) beyond the cage sides
   const boxW = 112, boxH = Math.max(28, ys - 8 - 98);
   const spanW = P.width + 2 * ext + 150;               // + room for the length dimension on the right
-  const yLow = Math.min(0, Lt - TL);                   // tail of the tray (or of the cages if they overhang)
-  const k = Math.min(boxW / spanW, boxH / (Lt - yLow + 380));
-  const ox = x0 + (114 - spanW * k) / 2 + ext * k, oy = ys - 14 - Lt * k - 6;
+  const yLow = Math.min(0, rearY);                     // tail of the tray (or of the cages if they overhang)
+  const k = Math.min(boxW / spanW, boxH / (headY - yLow + 380));
+  const ox = x0 + (114 - spanW * k) / 2 + ext * k, oy = ys - 14 - headY * k - 6;
   const Pp = (X, Yy) => [ox + X * k, oy + Yy * k];
   { // tray outline and headboard
-    const a = Pp(-room, Lt - TL), b = Pp(P.width + room, Lt);
+    const a = Pp(-room, rearY), b = Pp(P.width + room, headY);
     s.rect(a[0], a[1], b[0] - a[0], b[1] - a[1], { lw: 0.25, color: GREY, dash: [1.2, 0.8] });
-    const h0 = Pp(-room, Lt), h1 = Pp(P.width + room, Lt + 50);
+    const h0 = Pp(-room, headY), h1 = Pp(P.width + room, headY + 50);
     s.rect(h0[0], h0[1], h1[0] - h0[0], Math.max(0.6, h1[1] - h0[1]), { fill: LIGHT, lw: 0.2, color: GREY });
   }
   for (let i = 0; i < N; i++) {
@@ -499,15 +500,17 @@ function pageOverview(doc, M, S, I, info) {
       s.line([hp[0], hp[0] + dirOut * rr], [hp[1], hp[1]], { lw: 0.35, color: ACC });
     }
   }
-  const fa = Pp(P.width / 2, Lt + 140);
+  const fa = Pp(P.width / 2, headY + 140);
   s.arrow([fa[0], fa[1] + 4], [0, 1], { L: 2.6, W: 1.2 });
   s.line([fa[0], fa[0]], [fa[1], fa[1] + 2], { lw: 0.35 });
   s.text(fa[0] + 3, fa[1] + 1.6, 'FRONT (cab)', { size: 6, weight: 'bold', va: 'middle' });
   { const a = Pp(0, yLow), b = Pp(P.width, yLow); s.dim(a, b, a[1] - 6.5, 'h', f0(P.width), { size: 6 }); }
   if (room > 0) { const a = Pp(-room, yLow), b = Pp(0, yLow); s.dim(a, b, a[1] - 2.8, 'h', f0(room), { size: 5.4 }); const c = Pp(P.width, yLow), d = Pp(P.width + room, yLow); s.dim(c, d, c[1] - 2.8, 'h', f0(room), { size: 5.4 }); }
-  { const xd = Pp(P.width + ext + 45, 0)[0];
+  { // along the tray: tail to the cages, the cages, the cages to the headboard
+    const xd = Pp(P.width + ext + 45, 0)[0];
     const a = Pp(P.width, 0), b = Pp(P.width, Lt); s.dim(a, b, xd, 'v', f0(Lt), { size: 5.8 });
-    if (Math.abs(TL - Lt) > 1) { const c = Pp(P.width, Lt - TL); s.dim(c, a, xd, 'v', TL > Lt ? `${f0(TL - Lt)} spare` : `${f0(Lt - TL)} over`, { size: 5.4, color: TL > Lt ? GREY : ACC, side: 'start' }); } }
+    if (fGap > 1) s.dim(b, Pp(P.width, headY), xd, 'v', f0(fGap), { size: 5.4, color: GREY, side: 'end' });
+    if (Math.abs(behind) > 1) { const c = Pp(P.width, rearY); s.dim(c, a, xd, 'v', behind > 0 ? `${f0(behind)} behind` : `${f0(-behind)} over`, { size: 5.4, color: behind > 0 ? GREY : ACC, side: 'start' }); } }
   // legend
   let ly = Pp(0, yLow)[1] - 15;
   const lg = [[{ lw: 0.8, color: INK }, 'solid wall'], [{ lw: 0.7, color: INK, dash: [1.4, 0.7] }, 'air holes'], [{ lw: 0.7, color: GREY, dash: [0.3, 0.8] }, 'mesh'], [{ lw: 1.0, color: ACC }, 'door + swing']];
@@ -620,7 +623,8 @@ function pageGA(doc, M, S, I, info) {
   const notes = [
     first,
     (P.trayBolts && G.trayBoltJoist ? `Each row bolts to the tray with 4 x M${G.trayBoltD} (sheet 3).` : (P.trayBolts ? 'No tray bolts: with no floor joists there is nothing for them to pass through, so tie each row down your own way.' : 'Tray bolts are turned off: tie the cages down your own way.')) + (G.bolted ? ` Neighbouring rows bolt together through the top rails${G.plateT ? ' and the sheet between them' : ''} with 2 x M10 x ${G.joinBoltL}.` : ''),
-    `Hinge barrels stick out ${f0(G.hingeD)} beyond the cage ends and latches about ${Math.round(S.stickOut)} (${Math.round(S.stickOut + 7)} with the handle lifted). ` + ((P.trayWidth - L) / 2 >= 0 ? `You allowed ${f0((P.trayWidth - L) / 2)} each side to the tray edge.` : `The cages are ${f0(L - P.trayWidth)} wider than the tray you entered.`),
+    `Hinge barrels stick out ${f0(G.hingeD)} beyond the cage ends and latches about ${Math.round(S.stickOut)} (${Math.round(S.stickOut + 7)} with the handle lifted). ` + ((P.trayWidth - L) / 2 >= 0 ? `On the tray there is ${f0((P.trayWidth - L) / 2)} each side to the tray edge` : `The cages are ${f0(L - P.trayWidth)} wider than the tray you entered`)
+      + `; the cages sit ${f0(P.trayGapFront)} from the headboard with ${S.trayPlan.behind >= -0.5 ? `${f0(S.trayPlan.behind)} of tray behind them` : `${f0(-S.trayPlan.behind)} hanging past the tail`}.`,
     `Each door is ${f0(G.doorW)} wide and needs about ${f0(G.doorW + 30)} clear beside the cage to swing open. Check it clears any canopy side frame and gull-wing seals.`,
     `Overall height is ${f0(H + P.tRoof)} including the roof sheet. Check canopy, rack or headboard clearance.`,
     `Clear inside each compartment: ${f0(G.clearL)} long x ${f0(G.clearW)} wide x ${f0(G.clearH)} high under the top frame. Check your biggest dog can stand with its head up, turn round and lie flat.`,

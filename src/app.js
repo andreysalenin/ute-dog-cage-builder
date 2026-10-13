@@ -7,7 +7,7 @@ const LS_OLD = ['ute-dog-cage-builder.v1', 'ute-dog-cage-builder.sizes.v1']; // 
 const LS_VIEW = 'ute-dog-cage-builder.view.v1';    // viewer toggles
 const $ = (id) => document.getElementById(id);
 
-const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'doorGap', 'holeD', 'holePitch', 'holeMargin',
+const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'trayGapSide', 'trayGapFront', 'trayGapRear', 'doorGap', 'holeD', 'holePitch', 'holeMargin',
   'tSheet', 'tRoof', 'tFloor', 'joists', 'roofBars', 'meshPitch', 'meshWire', 'trayBoltInset', 'joinBoltInset', 'stockLength', 'sheetW', 'sheetH'];
 const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
 const CHK_FIELDS = ['trayBolts', 'joinBolts'];
@@ -207,42 +207,48 @@ function renderSummary() {
   const w = s.warnings.filter(x => x.level !== 'info'), info = s.warnings.filter(x => x.level === 'info');
   const item = (x) => `<div class="warn ${x.level === 'bad' ? 'bad' : x.level === 'info' ? 'info' : ''}"><span>${x.text}</span></div>`;
   $('warns').innerHTML = (w.length ? `<div class="warns">${w.map(item).join('')}</div>`
-    : `<div class="ok">Fits the tray you entered, with ${fmt(s.sideRoom)} each side and ${fmt(P.trayLength - s.overall.l)} spare in length.</div>`)
+    : `<div class="ok">Fits the tray you entered: ${fmt(s.sideRoom)} each side, ${fmt(P.trayGapFront)} from the headboard and ${fmt(s.trayPlan.behind)} left behind the cages.</div>`)
     + (info.length ? `<div class="warns">${info.map(item).join('')}</div>` : '');
-  // fit line under the Fit button
-  const spare = P.trayLength - s.overall.l;
-  $('fit-note').textContent = `Cages ${fmt(P.width)} x ${fmt(s.overall.l)} on a ${fmt(P.trayWidth)} x ${fmt(P.trayLength)} tray: ` +
-    (s.sideRoom < 0 ? `${fmt(-2 * s.sideRoom)} too wide` : `${fmt(s.sideRoom)} each side`) + ', ' +
-    (spare < -0.5 ? `${fmt(-spare)} too long.` : `${fmt(Math.max(0, spare))} spare in length.`) +
-    ` Fit keeps the locked sizes and changes the others.`;
+  // fit line under the Fit button, and how far the hinges and latches stick out
+  const behind = s.trayPlan.behind;
+  $('fit-note').textContent = `Now: cages ${fmt(P.width)} x ${fmt(s.overall.l)} on a ${fmt(P.trayWidth)} x ${fmt(P.trayLength)} tray, ` +
+    (s.sideRoom < 0 ? `${fmt(-2 * s.sideRoom)} too wide` : `${fmt(s.sideRoom)} each side`) + `, ${fmt(P.trayGapFront)} at the headboard, ` +
+    (behind < -0.5 ? `${fmt(-behind)} past the tail.` : `${fmt(behind)} behind.`) +
+    ` Fit keeps the locked sizes and the clearances, and changes the others.`;
+  $('side-note').textContent = `Tray edge to the cage side. Hinges and latches stick out about ${Math.round(s.stickOut)}.`;
 }
 
 /* ---------------------------------------------------------------- fit the cages and the tray to each other */
-// room each side of the cages for the hinge barrels and latches
-function sideRoom() { return Math.max(30, Math.ceil((summary.stickOut + 10) / 10) * 10); }
+// The clearances (each side, at the headboard, behind the cages) stay as set; Fit changes the unlocked sizes.
 function fit() {
-  readInputs();
-  const P = model.P, side = sideRoom();
+  clearTimeout(timer); rebuild(true); // start from what is typed in now
+  const P = model.P; // clamped values, including the clearances
+  const side = P.trayGapSide, front = P.trayGapFront, rear = P.trayGapRear;
   const N = params.rows;
   if (params.lock === 'tray') {
-    const W = Math.min(2400, Math.max(700, Math.floor((params.trayWidth - 2 * side) / 10) * 10));
-    const TL = params.trayLength, A = P.shs;
+    const wRaw = P.trayWidth - 2 * side;
+    const W = Math.min(2400, Math.max(700, Math.floor(wRaw)));
+    const avail = P.trayLength - front - rear, A = P.shs;
     const shared = N > 1 && (params.rowJoin === 'shared' || params.rowJoin === 'shared2');
     const plate = N > 1 && params.rowJoin === 'sandwich' && params.wallMiddle !== 'mesh' ? P.tSheet : 0;
     // overall length = N rows minus the shared rails, plus any sheets clamped between rows
-    const raw = shared ? (TL + (N - 1) * A) / N : (TL - (N - 1) * plate) / N;
-    const D = Math.min(1200, Math.max(350, Math.floor(raw / 5) * 5));
+    const raw = shared ? (avail + (N - 1) * A) / N : (avail - (N - 1) * plate) / N;
+    const D = Math.min(1200, Math.max(350, Math.floor(raw)));
     params.width = W; params.depth = D;
     fillInputs(); rebuild(true);
-    let msg = `Cages fitted to the tray: ${fmt(W)} wide (${fmt((params.trayWidth - W) / 2)} each side for the hinges and latches), ${N} ${N === 1 ? 'row' : 'rows'} of ${fmt(D)}.`;
-    if (raw > 1200) msg += ` Rows stop at 1200, so ${fmt(params.trayLength - summary.overall.l)} of the tray is left: add a row?`;
+    let msg = `Cages fitted to the tray: ${fmt(W)} wide, ${N} ${N === 1 ? 'row' : 'rows'} of ${fmt(D)}, ${fmt(summary.overall.l)} long, with ${fmt(summary.sideRoom)} each side, ${fmt(front)} at the headboard and ${fmt(summary.trayPlan.behind)} behind.`;
+    if (wRaw > 2400 || wRaw < 700) msg += ` The width stops at ${wRaw > 2400 ? 'the 2400 maximum' : 'the 700 minimum'}.`;
+    if (raw > 1200) msg += ` Rows stop at 1200, so more of the tray is left behind them: add a row?`;
     else if (raw < 350) msg += ` ${N} rows don't fit at the 350 minimum: try ${Math.max(1, N - 1)}.`;
     status(msg);
   } else {
-    params.trayWidth = Math.min(3000, Math.max(500, Math.ceil((P.width + 2 * side) / 10) * 10));
-    params.trayLength = Math.min(4000, Math.max(500, Math.ceil(model.G.Ltot / 5) * 5));
+    const tw = P.width + 2 * side, tl = model.G.Ltot + front + rear;
+    params.trayWidth = Math.min(3000, Math.max(500, Math.ceil(tw)));
+    params.trayLength = Math.min(4000, Math.max(500, Math.ceil(tl)));
     fillInputs(); rebuild(true);
-    status(`Tray set to the cages: ${fmt(params.trayWidth)} wide (${fmt((params.trayWidth - P.width) / 2)} each side) and ${fmt(params.trayLength)} long.`);
+    let msg = `Tray set to the cages: ${fmt(params.trayWidth)} wide and ${fmt(params.trayLength)} long, for ${fmt(side)} each side, ${fmt(front)} at the headboard and ${fmt(rear)} behind.`;
+    if (tw > 3000 || tl > 4000) msg += ` That is past the ${tw > 3000 ? '3000 width' : '4000 length'} limit, so the tray is cut short.`;
+    status(msg);
   }
   if (viewer && (viewOpts.tray || viewOpts.ute)) viewer.fit();
 }

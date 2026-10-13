@@ -11,7 +11,7 @@ Everything runs in the browser and nothing is uploaded. The page is a single sel
 
 ## What you can change
 
-- **Layout**: 1 to 6 rows, overall width, row depth and height, and the tray width and length. Lock either the cages or the tray, then **Fit** sizes the other set to match it (cages to fill the tray, or a tray to suit the cages).
+- **Layout**: 1 to 6 rows, overall width, row depth and height, and the tray width and length, plus the clearances on the tray: each side (100 by default), headboard to the front of the cages, and the back of the cages to the tail. Lock either the cages or the tray, then **Fit** sizes the other set to match it with those clearances (cages to fill the tray, or a tray to suit the cages).
 - **Doors**: front or rear hinge for each door, and the gap round each door.
 - **Walls**: solid sheet, sheet with air holes or weldmesh for the cab and tailgate faces and between rows, plus a solid or perforated divider and the air-hole size and spacing.
 - **How rows join**: separate frames with a wall each (rows bolt together), separate frames with one sheet clamped between them, or one shared frame with a wall on each side of the shared SHS or a single wall on its centre line. A shared frame saves one SHS width per joint.

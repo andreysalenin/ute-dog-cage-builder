@@ -83,6 +83,16 @@ const SCENARIOS = {
     await page.click('#hinge-grid button[data-row="1"][data-side="L"][data-v="front"]');
     await page.click('#hinge-grid button[data-row="0"][data-side="R"][data-v="front"]');
   },
+  clearances_fit: async (page) => {
+    for (const [id, v] of [['#trayGapSide', '120'], ['#trayGapFront', '50'], ['#trayGapRear', '300']]) { await page.fill(id, v); await page.dispatchEvent(id, 'change'); }
+    await page.click('#fit');
+    await page.check('#v-ute');
+  },
+  clearances_tray: async (page) => {
+    await page.click('#lock-cages');
+    for (const [id, v] of [['#depth', '600'], ['#trayGapSide', '80'], ['#trayGapRear', '500']]) { await page.fill(id, v); await page.dispatchEvent(id, 'change'); }
+    await page.click('#fit');
+  },
   six_rows_small: async (page) => {
     await page.evaluate(() => {
       const c = window.__cage; Object.assign(c.params, { rows: 6, shs: 20, shsT: 1.6, stockLength: 3000, height: 650, depth: 500 });
