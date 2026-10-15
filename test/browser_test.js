@@ -93,6 +93,33 @@ const SCENARIOS = {
     for (const [id, v] of [['#depth', '600'], ['#trayGapSide', '80'], ['#trayGapRear', '500']]) { await page.fill(id, v); await page.dispatchEvent(id, 'change'); }
     await page.click('#fit');
   },
+  holes_ui: async (page) => {
+    await page.selectOption('#roofType', 'perforated');
+    await page.selectOption('#wallFront', 'perforated');
+    await page.selectOption('#wallRear', 'perforated');
+    await page.selectOption('#divider', 'perforated');
+    await page.click('#hole-tabs [data-panel="front"]');
+    await page.selectOption('#h-pattern', 'stagger');
+    for (const [id, v] of [['#h-d', '20'], ['#h-px', '40'], ['#h-py', '35']]) { await page.fill(id, v); await page.dispatchEvent(id, 'change'); }
+    await page.click('#hole-tabs [data-panel="rear"]');
+    await page.selectOption('#h-area', 'top'); await page.fill('#h-rows', '2'); await page.dispatchEvent('#h-rows', 'change');
+    await page.click('#hole-tabs [data-panel="divider"]');
+    await page.selectOption('#h-area', 'topbottom'); await page.fill('#h-rows', '3'); await page.dispatchEvent('#h-rows', 'change');
+    await page.click('#hole-tabs [data-panel="roof"]');
+    await page.selectOption('#h-pattern', 'stagger');
+    for (const [id, v] of [['#h-d', '40'], ['#h-px', '80'], ['#h-py', '70']]) { await page.fill(id, v); await page.dispatchEvent(id, 'change'); }
+    await page.uncheck('#v-tray');
+  },
+  holes_copy_shared: async (page) => {
+    await page.click('#rows-inc');
+    await page.selectOption('#rowJoin', 'shared');
+    await page.click('#hole-tabs [data-panel="middle"]');
+    await page.selectOption('#h-pattern', 'stagger');
+    for (const [id, v] of [['#h-d', '25'], ['#h-px', '50'], ['#h-py', '45'], ['#h-margin', '30']]) { await page.fill(id, v); await page.dispatchEvent(id, 'change'); }
+    await page.click('#h-copy');
+    await page.click('#hole-tabs [data-panel="roof"]');
+    await page.click('#hole-use');
+  },
   six_rows_small: async (page) => {
     await page.evaluate(() => {
       const c = window.__cage; Object.assign(c.params, { rows: 6, shs: 20, shsT: 1.6, stockLength: 3000, height: 650, depth: 500 });
@@ -124,6 +151,7 @@ const SCENARIOS = {
     await SCENARIOS[name](page);
     await page.waitForTimeout(800);
     await page.screenshot({ path: path.join(dir, 'page.png') });
+    { const g = await page.$('#hole-preview'); if (g) { const d = await g.evaluateHandle(el => el.closest('details')); await d.evaluate(el => { el.open = true; el.scrollIntoView(); }); await page.waitForTimeout(150); await d.asElement().screenshot({ path: path.join(dir, 'holes.png') }); } }
     const info = await page.evaluate(() => ({
       params: window.__cage.params, parts: window.__cage.model.parts.length,
       total: window.__cage.summary.total, warnings: window.__cage.summary.warnings,

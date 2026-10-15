@@ -7,9 +7,9 @@ const LS_OLD = ['ute-dog-cage-builder.v1', 'ute-dog-cage-builder.sizes.v1']; // 
 const LS_VIEW = 'ute-dog-cage-builder.view.v1';    // viewer toggles
 const $ = (id) => document.getElementById(id);
 
-const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'trayGapSide', 'trayGapFront', 'trayGapRear', 'doorGap', 'holeD', 'holePitch', 'holeMargin',
+const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'trayGapSide', 'trayGapFront', 'trayGapRear', 'doorGap',
   'tSheet', 'tRoof', 'tFloor', 'joists', 'roofBars', 'meshPitch', 'meshWire', 'trayBoltInset', 'joinBoltInset', 'stockLength', 'sheetW', 'sheetH'];
-const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
+const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'roofType', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
 const CHK_FIELDS = ['trayBolts', 'joinBolts'];
 // sizes the page used for every material before aluminium got its own (used to spot old saved settings)
 const OLD_SIZES = { frame: { shs: 25, shsT: 2.0 }, sheet: { tSheet: 1.6, tRoof: 1.6, tFloor: 2.0 } };
@@ -29,6 +29,8 @@ function sanitize(obj) {
   for (let r = 0; r < out.rows; r++) { const x = hs[r] || {}; out.hinges.push({ L: x.L === 'front' || x.L === 'rear' ? x.L : out.defaultHinge, R: x.R === 'front' || x.R === 'rear' ? x.R : out.defaultHinge }); }
   for (const k of ['frameMat', 'sheetMat']) if (!['steel', 'aluminium'].includes(out[k])) out[k] = 'steel';
   out.lock = out.lock === 'cages' ? 'cages' : 'tray';
+  // hole arrangements per panel; older settings had one hole size and spacing for every panel
+  out.holes = C.normHoles(obj);
   return out;
 }
 const readLS = (k) => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (e) { return null; } };
@@ -84,6 +86,7 @@ function fillInputs() {
   $('rows-out').textContent = params.rows;
   matButtons();
   lockButtons();
+  fillHoles();
 }
 function matButtons() {
   document.querySelectorAll('[data-mat]').forEach(g => g.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(params[g.dataset.mat] === b.dataset.v))));
@@ -105,6 +108,79 @@ function readInputs() {
   for (const k of NUM_FIELDS) { const el = $(k); if (el && el.value !== '') { const v = parseFloat(el.value); if (isFinite(v)) params[k] = v; } }
   for (const k of SEL_FIELDS) { const el = $(k); if (el && el.value !== '') params[k] = (k === 'shs' || k === 'shsT') ? parseFloat(el.value) : el.value; }
   for (const k of CHK_FIELDS) { const el = $(k); if (el && !el.disabled) params[k] = el.checked; }
+  readHoles();
+}
+
+/* ---------------------------------------------------------------- air holes: one arrangement per panel */
+const HOLE_WHERE = { front: 'Front face', middle: 'Between rows', rear: 'Rear face', divider: 'Divider', roof: 'Roof' };
+const HOLE_TYPE_KEY = { front: 'wallFront', middle: 'wallMiddle', rear: 'wallRear', divider: 'divider', roof: 'roofType' };
+const H_FIELDS = { pattern: 'h-pattern', area: 'h-area', rows: 'h-rows', d: 'h-d', px: 'h-px', py: 'h-py', margin: 'h-margin' };
+let holePanel = 'middle';
+function holeSpec(k) {
+  if (!params.holes || typeof params.holes !== 'object') params.holes = {};
+  params.holes[k] = Object.assign({}, C.HOLE_DEFAULT, params.holes[k] || {});
+  return params.holes[k];
+}
+function fillHoles() {
+  const sp = holeSpec(holePanel);
+  for (const [k, id] of Object.entries(H_FIELDS)) $(id).value = String(sp[k]);
+  document.querySelectorAll('#hole-tabs [data-panel]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.panel === holePanel)));
+  holeView();
+}
+function readHoles() {
+  const sp = holeSpec(holePanel);
+  for (const [k, id] of Object.entries(H_FIELDS)) {
+    const el = $(id); if (!el || el.value === '') continue;
+    if (k === 'pattern' || k === 'area') sp[k] = el.value; else { const v = parseFloat(el.value); if (isFinite(v)) sp[k] = v; }
+  }
+}
+// which panels have holes, the fields that apply, and a drawing of the panel being set out
+function holeView() {
+  let P, G;
+  try { P = C.normParams(params); G = C.derived(P); } catch (e) { return; }
+  const used = C.holePlaces(P, G), sp = P.holes[holePanel], u = used[holePanel], roof = holePanel === 'roof';
+  document.querySelectorAll('#hole-tabs [data-panel]').forEach(b => b.classList.toggle('on', used[b.dataset.panel].used));
+  $('h-area-f').hidden = roof;
+  $('h-rows-f').hidden = roof || sp.area === 'all';
+  $('h-py-lab').textContent = roof ? 'Spacing along the ute' : 'Spacing up';
+  let txt, canUse = false;
+  if (holePanel === 'middle' && P.rows < 2) txt = 'Between rows: only with two or more rows.';
+  else if (u.used) txt = `${HOLE_WHERE[holePanel]}: ${u.panels} ${roof ? (u.panels === 1 ? 'sheet' : 'sheets') : (u.panels === 1 ? 'panel' : 'panels')} with these holes, mark ${u.mark}.`;
+  else { txt = `${HOLE_WHERE[holePanel]} is ${params[HOLE_TYPE_KEY[holePanel]] === 'mesh' ? 'weldmesh' : 'solid'}, so these holes are not used yet.`; canUse = true; }
+  $('hole-status').textContent = txt;
+  $('hole-use').hidden = !canUse;
+  drawHolePreview(P, G, sp, roof);
+}
+function drawHolePreview(P, G, sp, roof) {
+  // panel outline (u across, v up) and the areas the holes are set out in
+  let W, H, bays, members = [];
+  if (roof) {
+    W = P.width; H = P.depth;
+    bays = G.roofBays.map(([x0, x1]) => [x0, G.A, x1 - x0, H - 2 * G.A]);
+    const A = G.A, h = G.h;
+    members = [[0, 0, W, A], [0, H - A, W, A], [0, 0, A, H], [W - A, 0, A, H], [G.XC - h, 0, A, H]]
+      .concat(G.roofC.flatMap(c => [[c - h, 0, A, H], [W - c - h, 0, A, H]]));
+  } else {
+    W = holePanel === 'divider' ? G.openW : G.XC - G.h - G.A; H = G.openH;
+    bays = [[0, 0, W, H]];
+  }
+  let n = 0, area = 0, holes = '', borders = '';
+  for (const [x0, y0, w, h] of bays) {
+    area += w * h;
+    for (const [du, dv] of C.holePattern(w, h, sp)) { n++; holes += `<circle cx="${(x0 + w / 2 + du).toFixed(1)}" cy="${(H - (y0 + h / 2 + dv)).toFixed(1)}" r="${(sp.d / 2).toFixed(1)}"/>`; }
+    const m = sp.margin;
+    if (w > 2 * m && h > 2 * m) borders += `<rect x="${x0 + m}" y="${(H - y0 - h + m).toFixed(1)}" width="${(w - 2 * m).toFixed(1)}" height="${(h - 2 * m).toFixed(1)}"/>`;
+  }
+  const pad = Math.max(W, H) * 0.025;
+  const svg = $('hole-preview');
+  svg.setAttribute('viewBox', `${(-pad).toFixed(1)} ${(-pad).toFixed(1)} ${(W + 2 * pad).toFixed(1)} ${(H + 2 * pad).toFixed(1)}`);
+  svg.innerHTML = `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" style="fill:var(--sheet)"/>`
+    + members.map(([x, y, w, h]) => `<rect x="${x.toFixed(1)}" y="${(H - y - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:var(--muted);opacity:.28"/>`).join('')
+    + `<g style="fill:none;stroke:var(--muted);stroke-dasharray:4 3;opacity:.7" vector-effect="non-scaling-stroke">${borders.replace(/<rect /g, '<rect vector-effect="non-scaling-stroke" ')}</g>`
+    + `<g style="fill:var(--bg)">${holes}</g>`;
+  const open = area > 0 ? n * Math.PI * sp.d * sp.d / 4 / area * 100 : 0;
+  $('hole-count').textContent = (roof ? `Roof ${fmt(W)} x ${fmt(H)}, holes over the ${bays.length} open bays of the top frame (shaded bands are the frame under it): ` : `Panel ${fmt(W)} x ${fmt(H)}: `)
+    + `${n} ${n === 1 ? 'hole' : 'holes'}${roof ? '' : ' each'}, ${open.toFixed(1)}% open. Dashed line: plain border.`;
 }
 function hingeGrid() {
   const g = $('hinge-grid');
@@ -146,6 +222,9 @@ function syncInputs() {
   const P = C.normParams(params); // range clamps only; automatic moves (join bolts, hole spacing) stay as warnings
   for (const k of NUM_FIELDS) { const el = $(k); if (el && el.value !== '' && Math.abs(parseFloat(el.value) - P[k]) > 1e-9) el.value = P[k]; }
   for (const k of ['shs', 'shsT']) { const el = $(k); if (el && Math.abs(parseFloat(el.value) - P[k]) > 1e-9) { el.value = String(P[k]); if (el.value === '') el.value = String(params[k]); } }
+  // hole fields: show the clamped arrangement (e.g. spacing raised to keep 5 of metal between holes)
+  const sp = P.holes[holePanel];
+  for (const [k, id] of Object.entries(H_FIELDS)) { const el = $(id); if (el && String(sp[k]) !== el.value && !(k !== 'pattern' && k !== 'area' && Math.abs(parseFloat(el.value) - sp[k]) < 1e-9)) el.value = String(sp[k]); }
 }
 function fmt(v) { return Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1); }
 function rebuild(keepView) {
@@ -160,6 +239,7 @@ function rebuild(keepView) {
   if (syncPending) { syncPending = false; syncInputs(); }
   renderSummary();
   joinNotes();
+  holeView();
   $('hdr-layout').textContent = `${model.P.rows} x 2`;
   $('hdr-mat').textContent = { steel: 'Steel', aluminium: 'Aluminium', stainless: 'Stainless' }[C.metalOf(model.P, 'frame')];
   lastBuild = performance.now() - t0;
@@ -202,7 +282,10 @@ function renderSummary() {
     ['Sheet and mesh', `${nSheets()} ${sm === 'stainless' ? 'stainless' : sm}${nMesh ? ` + ${nMesh} mesh` : ''}`, `${fmt(P.sheetW)} x ${fmt(P.sheetH)} sheets, ${C.kindOf(P, 'sheet').grade}`],
   ];
   if (P.rows > 1) figs.push(['Between rows', `${fmt(G.betweenDogs)} mm`, C.ROW_JOINS[P.rowJoin].short]);
-  if (holes) figs.push(['Air holes', `${holes} x Ø${fmt(P.holeD)}`, `at ${fmt(P.holePitch)} mm`]);
+  if (holes) {
+    const used = C.holePlaces(P, G), sizes = [...new Set(C.HOLE_PANELS.filter(k => used[k].used).map(k => P.holes[k].d))].sort((a, b) => b - a);
+    figs.push(['Air holes', `${holes}`, `Ø${sizes.map(fmt).join(', Ø')} mm, ${C.HOLE_PANELS.filter(k => used[k].used).map(k => ({ front: 'front', middle: 'between rows', rear: 'rear', divider: 'dividers', roof: 'roof' })[k]).join(', ')}`]);
+  }
   $('figs').innerHTML = figs.map(([k, v, u]) => `<div class="fig"><div class="k">${k}</div><div class="v">${v} <small>${u}</small></div></div>`).join('');
   const w = s.warnings.filter(x => x.level !== 'info'), info = s.warnings.filter(x => x.level === 'info');
   const item = (x) => `<div class="warn ${x.level === 'bad' ? 'bad' : x.level === 'info' ? 'info' : ''}"><span>${x.text}</span></div>`;
@@ -313,6 +396,24 @@ function bind() {
   }));
   document.querySelectorAll('.lock').forEach(b => b.addEventListener('click', () => { params.lock = b.dataset.lock; lockButtons(); save(); }));
   $('fit').addEventListener('click', fit);
+  // air holes: pick a panel, edit its arrangement (the drawing updates as you type)
+  $('hole-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-panel]'); if (!b || b.dataset.panel === holePanel) return;
+    readHoles(); holePanel = b.dataset.panel; fillHoles();
+  });
+  for (const id of Object.values(H_FIELDS)) $(id).addEventListener('input', () => { readHoles(); holeView(); });
+  $('hole-use').addEventListener('click', () => {
+    readInputs(); // keep edits that haven't been rebuilt yet
+    params[HOLE_TYPE_KEY[holePanel]] = 'perforated';
+    fillInputs(); schedule(true);
+  });
+  $('h-copy').addEventListener('click', () => {
+    readHoles();
+    const src = Object.assign({}, holeSpec(holePanel));
+    for (const k of C.HOLE_PANELS) if (k !== holePanel) params.holes[k] = Object.assign({}, src);
+    holeView(); schedule(true);
+    status(`${HOLE_WHERE[holePanel]} hole arrangement copied to every panel` + (holePanel !== 'roof' && src.area !== 'all' ? ' (the roof always uses the whole panel).' : '.'));
+  });
   $('hinge-all-rear').addEventListener('click', () => { params.defaultHinge = 'rear'; params.hinges = params.hinges.map(() => ({ L: 'rear', R: 'rear' })); hingeGrid(); schedule(true); });
   $('hinge-all-front').addEventListener('click', () => { params.defaultHinge = 'front'; params.hinges = params.hinges.map(() => ({ L: 'front', R: 'front' })); hingeGrid(); schedule(true); });
   document.querySelectorAll('.tools [data-view]').forEach(b => b.addEventListener('click', () => {
@@ -357,6 +458,10 @@ function bind() {
 }
 
 function start() {
+  { // start on a panel that has holes
+    const P = C.normParams(params), used = C.holePlaces(P, C.derived(P));
+    holePanel = ['middle', 'front', 'rear', 'divider', 'roof'].find(k => used[k].used) || 'middle';
+  }
   fillInputs();
   hingeGrid();
   try { viewer = new V.Viewer($('viewer')); viewer.onOrient = (t) => { $('front-tag').textContent = t; }; }

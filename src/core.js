@@ -5,6 +5,10 @@
 'use strict';
 
 /* ------------------------------------------------------------------ defaults */
+// air holes: one arrangement for each panel position that can have them
+const HOLE_PANELS = ['front', 'middle', 'rear', 'divider', 'roof'];
+const HOLE_DEFAULT = { pattern: 'grid', area: 'all', rows: 2, d: 30, px: 75, py: 75, margin: 45 };
+const HOLE_WEB = 5; // least metal left between neighbouring holes
 const DEFAULTS = {
   rows: 2,               // modules front-to-back (each holds 2 dogs side by side)
   width: 1700,           // overall width across the ute
@@ -27,7 +31,9 @@ const DEFAULTS = {
   wallMiddle: 'perforated', // walls between rows
   rowJoin: 'separate',   // how rows meet: separate | sandwich | shared2 | shared (see ROW_JOINS)
   divider: 'solid',      // between the two dogs of a row: solid | perforated
-  holeD: 30, holePitch: 75, holeMargin: 45,
+  roofType: 'solid',     // solid | perforated
+  // pattern grid | stagger; area all | top | topbottom (rows in each band); d hole size; px, py spacing across and up; margin plain border
+  holes: Object.fromEntries(HOLE_PANELS.map(k => [k, Object.assign({}, HOLE_DEFAULT)])),
   meshPitch: 50, meshWire: 4, meshEdge: 25,
   doorGap: 5,
   hinges: [],            // per row from the front: {L:'rear'|'front', R:'rear'|'front'}
@@ -98,6 +104,7 @@ const MATERIALS = {
   plastic: { label: 'Plastic', short: 'plastic', density: 1.2e-6, E: 2e3 },
 };
 const SHEET_KINDS = ['floor', 'roof', 'sheet', 'perf'];
+const fmt0 = (v) => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
 const SHS_SIZES = [20, 25, 30, 35, 40], SHS_WALLS = [1.6, 2.0, 2.5, 3.0]; // the sections offered on the page
 // the chosen grade for 'frame' or 'sheet' (falls back to the first one offered for the material)
 function kindOf(P, which) {
@@ -128,13 +135,13 @@ function normParams(p) {
   num('trayWidth', 500, 3000); num('trayLength', 500, 4000);
   num('trayGapSide', 0, 500); num('trayGapFront', 0, 2000); num('trayGapRear', 0, 2000);
   num('shs', 20, 50); num('shsT', 1.2, 4); num('tFloor', 1, 5); num('tSheet', 0.8, 4); num('tRoof', 0.8, 4);
-  num('holeD', 10, 80); num('holePitch', 20, 250); num('holeMargin', 5, 200);
+  P.holes = normHoles(p);
+  if (!['solid', 'perforated'].includes(P.roofType)) P.roofType = 'solid';
   num('meshPitch', 20, 150); num('meshWire', 2, 8); num('meshEdge', 5, 100);
   num('doorGap', 2, 8); num('joists', 0, 6); num('roofBars', 0, 4);
   num('trayBoltInset', 40, 400); num('joinBoltInset', 60, 600); num('notchClear', 0, 15);
   num('stockLength', 3000, 12000); num('kerf', 0, 6); num('sheetW', 500, 6000); num('sheetH', 500, 3000);
   P.joists = Math.round(P.joists); P.roofBars = Math.round(P.roofBars);
-  if (P.holePitch < Math.max(P.holeD + 10, 25)) P.holePitch = Math.max(P.holeD + 10, 25); // keeps the hole count sane
   for (const k of ['wallFront', 'wallRear', 'wallMiddle']) if (!['solid', 'perforated', 'mesh'].includes(P[k])) P[k] = DEFAULTS[k];
   if (!['solid', 'perforated'].includes(P.divider)) P.divider = 'solid';
   for (const k of ['frameMat', 'sheetMat']) if (!['steel', 'aluminium'].includes(P[k])) P[k] = 'steel';
@@ -422,14 +429,62 @@ function wirePositions(span, P) {
   for (let i = 0; i <= n; i++) out.push((-n / 2 + i) * P.meshPitch);
   return out;
 }
-function holeGrid(w, h, P) { // centred hole pattern in a w x h panel; returns offsets from the panel centre
-  const m = P.holeMargin + P.holeD / 2;
-  const nu = Math.floor((w - 2 * m) / P.holePitch + 1e-9), nv = Math.floor((h - 2 * m) / P.holePitch + 1e-9);
-  const us = [], vs = [];
-  if (nu < 0 || nv < 0) return { us, vs };
-  for (let i = 0; i <= nu; i++) us.push((-nu / 2 + i) * P.holePitch);
-  for (let j = 0; j <= nv; j++) vs.push((-nv / 2 + j) * P.holePitch);
-  return { us, vs };
+// one hole arrangement, clamped so the holes keep at least HOLE_WEB of metal between them
+function normHoleSpec(s, panel) {
+  const num = (v, lo, hi, d) => { v = Number(v); if (!isFinite(v)) v = d; return Math.min(hi, Math.max(lo, v)); };
+  const o = {
+    pattern: s.pattern === 'stagger' ? 'stagger' : 'grid',
+    area: panel !== 'roof' && ['top', 'topbottom'].includes(s.area) ? s.area : 'all',
+    rows: Math.round(num(s.rows, 1, 12, HOLE_DEFAULT.rows)),
+    d: num(s.d, 6, 80, HOLE_DEFAULT.d), px: num(s.px, 12, 300, HOLE_DEFAULT.px), py: num(s.py, 12, 300, HOLE_DEFAULT.py),
+    margin: num(s.margin, 5, 200, HOLE_DEFAULT.margin),
+  };
+  const gap = o.d + HOLE_WEB;
+  o.px = Math.max(o.px, gap);
+  // staggered rows may sit closer than the hole spacing, as long as the diagonal neighbours keep their web
+  o.py = o.pattern === 'stagger' ? Math.max(o.py, Math.ceil(gap / 2), Math.ceil(Math.sqrt(Math.max(0, gap * gap - o.px * o.px / 4)))) : Math.max(o.py, gap);
+  return o;
+}
+// every panel's arrangement; settings from before arrangements existed (holeD, holePitch, holeMargin) apply to all panels
+function normHoles(p) {
+  p = p || {};
+  const legacy = {};
+  if (p.holeD !== undefined) legacy.d = p.holeD;
+  if (p.holePitch !== undefined) { legacy.px = p.holePitch; legacy.py = p.holePitch; }
+  if (p.holeMargin !== undefined) legacy.margin = p.holeMargin;
+  const given = p.holes && typeof p.holes === 'object' ? p.holes : {};
+  const out = {};
+  for (const k of HOLE_PANELS) out[k] = normHoleSpec(Object.assign({}, HOLE_DEFAULT, legacy, given[k] && typeof given[k] === 'object' ? given[k] : {}), k);
+  return out;
+}
+// hole centres in a w (across) x h (up) panel, as offsets [du, dv] from the panel centre
+function holePattern(w, h, spec) {
+  const m = spec.margin + spec.d / 2;          // panel edge to the nearest hole centre
+  const uw = w - 2 * m, vh = h - 2 * m;
+  if (uw < -1e-9 || vh < -1e-9) return [];
+  const nu = Math.floor(Math.max(0, uw) / spec.px + 1e-9);   // nu + 1 holes across
+  const total = Math.floor(Math.max(0, vh) / spec.py + 1e-9) + 1; // rows that fit
+  const rows = []; // [v, parity]
+  const n = Math.min(spec.rows, total);
+  if (spec.area === 'all' || (spec.area === 'topbottom' && 2 * n > total)) {
+    for (let j = 0; j < total; j++) rows.push([((total - 1) / 2 - j) * spec.py, j % 2]);
+  } else {
+    for (let j = 0; j < n; j++) rows.push([h / 2 - m - j * spec.py, j % 2]);
+    if (spec.area === 'topbottom') for (let j = 0; j < n; j++) rows.push([-h / 2 + m + j * spec.py, j % 2]);
+  }
+  const out = [];
+  for (const [v, par] of rows) {
+    const off = spec.pattern === 'stagger' && par === 1; // staggered rows sit half a space across, one hole fewer
+    const k = off ? nu : nu + 1;
+    for (let i = 0; i < k; i++) out.push([(-nu / 2 + i + (off ? 0.5 : 0)) * spec.px, v]);
+  }
+  return out;
+}
+// short description of an arrangement, e.g. "Ø30 @ 75 staggered, top 2 rows"
+function holeText(spec) {
+  const sp = Math.abs(spec.px - spec.py) < 0.5 ? `${fmt0(spec.px)}` : `${fmt0(spec.px)} x ${fmt0(spec.py)}`;
+  const where = spec.area === 'top' ? `, top ${spec.rows} ${spec.rows === 1 ? 'row' : 'rows'}` : spec.area === 'topbottom' ? `, ${spec.rows} ${spec.rows === 1 ? 'row' : 'rows'} top and bottom` : '';
+  return `Ø${fmt0(spec.d)} @ ${sp}${spec.pattern === 'stagger' ? ' staggered' : ''}${where}`;
 }
 function rowLabel(i, N) { return String.fromCharCode(65 + (N - 1 - i)); } // i = 0 rear -> label from the front
 
@@ -462,8 +517,12 @@ function derived(P) {
   for (let i = 0; i < N - 1; i++) joints.push(shared ? rowY[i + 1] + h : rowY[i] + D + plateT / 2);
   // keepers on a shared post get half its depth each (both neighbouring doors use that post)
   const halfKeeper = [6, 8, 10, 12, 16, 20].filter(w => w <= h - 1).pop() || 6;
+  // open bays of the top frame across the cage: roof holes go only there, clear of the rails, bars and centre cross
+  const tops = [[0, A], [XC - h, XC + h], [L - A, L]].concat(roofC.map(c => [c - h, c + h]), roofC.map(c => [L - c - h, L - c + h])).sort((a, b) => a[0] - b[0]);
+  const roofBays = [];
+  for (let k = 0; k < tops.length - 1; k++) if (tops[k + 1][0] - tops[k][1] > 1) roofBays.push([tops[k][1], tops[k + 1][0]]);
   return {
-    N, shared, sandwich, plateT, pitch, rowY, joints, Ltot: N ? (N - 1) * pitch + D : 0,
+    N, shared, sandwich, plateT, pitch, rowY, joints, Ltot: N ? (N - 1) * pitch + D : 0, roofBays,
     bolted: !shared && P.joinBolts && N > 1, betweenDogs: shared ? A : 2 * A + plateT, halfKeeper,
     crush, trayBoltD: crush ? crush.bolt : 8, shsFlat: flat,
     // steel and aluminium can't be welded together: infills become folded trays riveted into the frame
@@ -503,6 +562,27 @@ function faceSpec(P, G, i, face) {
   return { type: t, style: 'infill' };
 }
 
+// where each hole arrangement is used: panels (one per bay for walls) and the mark of walls with holes
+function holePlaces(P, G) {
+  const N = P.rows, out = {};
+  for (const k of HOLE_PANELS) out[k] = { used: false, panels: 0, style: null, mark: null };
+  for (let i = 0; i < N; i++) for (const face of ['rear', 'front']) {
+    const f = faceSpec(P, G, i, face);
+    if (!f || f.type !== 'perforated') continue;
+    const place = face === 'rear' && i === 0 ? 'rear' : face === 'front' && i === N - 1 ? 'front' : 'middle';
+    out[place].used = true; out[place].panels += 2; out[place].style = f.style;
+    out[place].mark = f.style === 'centre' ? 'S7' : 'S5';
+  }
+  if (G.plateT && P.wallMiddle === 'perforated') Object.assign(out.middle, { used: true, panels: 2 * (N - 1), style: 'plate', mark: 'S8' });
+  if (P.divider === 'perforated') Object.assign(out.divider, { used: true, panels: N, mark: 'S6' });
+  if (P.roofType === 'perforated') Object.assign(out.roof, { used: true, panels: N, mark: 'S2' });
+  // walls with holes share S5 while their arrangements match; different arrangements become S5a, S5b, S5c
+  const infill = ['front', 'middle', 'rear'].filter(k => out[k].used && out[k].style === 'infill');
+  const keys = [...new Set(infill.map(k => JSON.stringify(P.holes[k])))];
+  if (keys.length > 1) for (const k of infill) out[k].mark = 'S5' + 'abc'[keys.indexOf(JSON.stringify(P.holes[k]))];
+  return out;
+}
+
 function build(params) {
   const P = normParams(params);
   const G = derived(P);
@@ -516,20 +596,25 @@ function build(params) {
     if (best === null) { P.joinBolts = false; P.joinBoltsDropped = true; G.bolted = false; }
     else if (Math.abs(best - P.joinBoltInset) > 1e-9) { P.joinBoltMoved = P.joinBoltInset; P.joinBoltInset = best; }
   }
-  // cap the number of air holes so the model, viewer and STEP stay workable
+  // cap the number of air holes so the model, viewer and STEP stay workable: spread every arrangement out evenly
   {
-    const per = (w, hh) => { const g = holeGrid(w, hh, P); return g.us.length * g.vs.length; };
-    const count = () => {
+    const used = holePlaces(P, G), bw = G.XC - G.h - G.A;
+    const count = (sc) => {
+      const sp = (k) => Object.assign({}, P.holes[k], { px: P.holes[k].px * sc, py: P.holes[k].py * sc });
       let n = 0;
-      for (let i = 0; i < P.rows; i++) {
-        for (const face of ['rear', 'front']) { const f = faceSpec(P, G, i, face); if (f && f.type === 'perforated') n += 2 * per(G.XC - G.h - G.A, G.openH); }
-        if (P.divider === 'perforated') n += per(G.openW, G.openH);
-      }
-      if (G.plateT && P.wallMiddle === 'perforated') n += (P.rows - 1) * 2 * per(G.XC - G.h - G.A, G.openH);
+      for (const k of ['front', 'middle', 'rear']) if (used[k].used) n += used[k].panels * holePattern(bw, G.openH, sp(k)).length;
+      if (used.divider.used) n += used.divider.panels * holePattern(G.openW, G.openH, sp('divider')).length;
+      if (used.roof.used) n += used.roof.panels * G.roofBays.reduce((a, [x0, x1]) => a + holePattern(x1 - x0, G.D - 2 * G.A, sp('roof')).length, 0);
       return n;
     };
-    if (count() > MAX_HOLES) { P.holePitchWanted = P.holePitch; while (count() > MAX_HOLES) P.holePitch += 5; }
+    if (count(1) > MAX_HOLES) {
+      let sc = 1;
+      while (count(sc) > MAX_HOLES && sc < 50) sc *= 1.05;
+      P.holeScale = sc;
+      for (const k of HOLE_PANELS) P.holes[k] = Object.assign({}, P.holes[k], { px: Math.ceil(P.holes[k].px * sc), py: Math.ceil(P.holes[k].py * sc) });
+    }
   }
+  const places = holePlaces(P, G);
   const { A, h, L, D, H, XC, zFloor, zTopU } = G;
   const N = P.rows;
   const parts = [];
@@ -608,27 +693,32 @@ function build(params) {
            note: (G.shared ? 'ends on the rail centre lines, ' : '') + (P.trayBolts && G.trayBoltJoist !== null ? 'post notches + bolt holes' : 'post notches'),
            massFactor: tread ? TREAD_MASS : 1, tread, solids: [prism([0, 0, A], X, Y, P.tFloor, floorLoops)] });
     const ry0 = sharedRear ? h : 0, ry1 = sharedFront ? D - h : D;
-    add_({ name: 'roof', kind: 'roof', mark: 'S2', stock: `Sheet ${P.tRoof.toFixed(1)}`, size: [L, ry1 - ry0], note: G.mixed ? 'riveted to top frame' : 'sits on top frame',
-           solids: [boxP(0, L, ry0, ry1, H, H + P.tRoof)] });
+    {
+      // roof holes only over the open bays of the top frame
+      const rs = P.holes.roof, bh = D - 2 * A, rh = [];
+      if (P.roofType === 'perforated') for (const [xa, xb] of G.roofBays) for (const [du, dv] of holePattern(xb - xa, bh, rs)) rh.push([(xa + xb) / 2 + du, A + bh / 2 + dv, rs.d / 2]);
+      add_({ name: 'roof', kind: 'roof', mark: 'S2', stock: `Sheet ${P.tRoof.toFixed(1)}`, size: [L, ry1 - ry0],
+             note: (G.mixed ? 'riveted to top frame' : 'sits on top frame') + (rh.length ? `, ${rh.length} x ${fmt0(rs.d)} holes` : ''),
+             holes: rh.length, place: P.roofType === 'perforated' ? 'roof' : undefined, perforated: P.roofType === 'perforated',
+             solids: [rh.length ? plateP('z', H, H + P.tRoof, [0, L], [ry0, ry1], rh) : boxP(0, L, ry0, ry1, H, H + P.tRoof)] });
+    }
     {
       const w = D - 2 * A, hh = zTopU - zFloor;
       let holes = [];
-      if (P.divider === 'perforated') {
-        const g = holeGrid(w, hh, P);
-        for (const du of g.us) for (const dv of g.vs) holes.push([A + w / 2 + du, zFloor + hh / 2 + dv, P.holeD / 2]);
-      }
+      const hs = P.holes.divider;
+      if (P.divider === 'perforated') for (const [du, dv] of holePattern(w, hh, hs)) holes.push([A + w / 2 + du, zFloor + hh / 2 + dv, hs.d / 2]);
       const t = P.tSheet, sol = [plateP('x', XC - t / 2, XC + t / 2, [A, D - A], [zFloor, zTopU], holes)];
-      let size = [w, hh], note = P.divider === 'perforated' ? `divider, ${holes.length} x ${P.holeD} holes` : 'centre divider infill';
+      let size = [w, hh], note = P.divider === 'perforated' ? `divider, ${holes.length} x ${fmt0(hs.d)} holes` : 'centre divider infill';
       if (G.mixed) { // folded tray: flanges to the right, against the centre posts, cross and floor
         const f = G.divF, x0 = XC + t / 2, x1 = x0 + f;
         sol.push(boxP(x0, x1, A, A + t, zFloor + t, zTopU - t), boxP(x0, x1, D - A - t, D - A, zFloor + t, zTopU - t),
                  boxP(x0, x1, A, D - A, zFloor, zFloor + t), boxP(x0, x1, A, D - A, zTopU - t, zTopU));
         size = [w + 2 * f, hh + 2 * f];
-        note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+        note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${fmt0(hs.d)} holes` : '');
       }
       add_({ name: 'divider', kind: P.divider === 'perforated' ? 'perf' : 'sheet', mark: P.divider === 'perforated' ? 'S6' : 'S3',
              stock: `Sheet ${P.tSheet.toFixed(1)}`, size, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null,
-             holes: holes.length, solids: sol });
+             holes: holes.length, place: 'divider', perforated: P.divider === 'perforated', solids: sol });
     }
 
     // ---------------- long walls
@@ -636,10 +726,12 @@ function build(params) {
       const spec = faceSpec(P, G, i, face);
       if (!spec) continue;
       const type = spec.type;
+      const place = face === 'rear' && i === 0 ? 'rear' : face === 'front' && i === N - 1 ? 'front' : 'middle', hs = P.holes[place];
       G.bays.forEach(([xa, xb], bi) => {
         const bay = bi === 0 ? 'left' : 'right';
         const w = xb - xa, hh = zTopU - zFloor;
-        const grid = () => { const out = [], g = holeGrid(w, hh, P); for (const du of g.us) for (const dv of g.vs) out.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]); return out; };
+        // profile coordinates for a plate normal to Y are (z, x)
+        const grid = () => holePattern(w, hh, hs).map(([du, dv]) => [zFloor + hh / 2 + dv, xa + w / 2 + du, hs.d / 2]);
         if (type === 'mesh') {
           const yc = face === 'rear' ? h : D - h;
           const dogSide = face === 'rear' ? 1 : -1;
@@ -654,31 +746,32 @@ function build(params) {
           const t = P.tSheet, y0 = h - t / 2;
           const holes = type === 'perforated' ? grid() : [];
           const sol = [plateP('y', y0, y0 + t, [zFloor, zTopU], [xa, xb], holes)];
-          let size = [w, hh], note = holes.length ? `wall between rows, ${holes.length} x ${P.holeD} holes` : 'wall between rows, on the rail centre line';
+          let size = [w, hh], note = holes.length ? `wall between rows, ${holes.length} x ${fmt0(hs.d)} holes` : 'wall between rows, on the rail centre line';
           if (G.mixed) { // folded tray, flanges toward the front against the posts, rail and floor
             const f = G.divF, ya = y0 + t, yb = ya + f;
             sol.push(boxP(xa, xa + t, ya, yb, zFloor + t, zTopU - t), boxP(xb - t, xb, ya, yb, zFloor + t, zTopU - t),
                      boxP(xa, xb, ya, yb, zFloor, zFloor + t), boxP(xa, xb, ya, yb, zTopU - t, zTopU));
             size = [w + 2 * f, hh + 2 * f];
-            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${fmt0(hs.d)} holes` : '');
           }
           add_({ name: `rear wall ${bay} shared ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: 'S7',
-                 stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null, solids: sol });
+                 stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null,
+                 place, perforated: type === 'perforated', solids: sol });
         } else {
           const y0 = face === 'rear' ? A - P.tSheet : D - A;
           const holes = type === 'perforated' ? grid() : [];
           const t = P.tSheet, sol = [plateP('y', y0, y0 + t, [zFloor, zTopU], [xa, xb], holes)];
-          let size = [w, hh], note = type === 'perforated' ? `wall infill, ${holes.length} x ${P.holeD} holes` : 'wall infill, flush with inside face';
+          let size = [w, hh], note = type === 'perforated' ? `wall infill, ${holes.length} x ${fmt0(hs.d)} holes` : 'wall infill, flush with inside face';
           if (G.mixed) { // folded tray: flanges run back into the frame opening against posts, rail and floor
             const f = G.trayF, ya = face === 'rear' ? y0 - f : y0 + t, yb = ya + f;
             sol.push(boxP(xa, xa + t, ya, yb, zFloor + t, zTopU - t), boxP(xb - t, xb, ya, yb, zFloor + t, zTopU - t),
                      boxP(xa, xb, ya, yb, zFloor, zFloor + t), boxP(xa, xb, ya, yb, zTopU - t, zTopU));
             size = [w + 2 * f, hh + 2 * f];
-            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${fmt0(hs.d)} holes` : '');
           }
-          add_({ name: `${face} wall ${bay} ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: type === 'perforated' ? 'S5' : 'S4',
+          add_({ name: `${face} wall ${bay} ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: type === 'perforated' ? places[place].mark : 'S4',
                  stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.trayF, face: [w, hh] } : null,
-                 solids: sol });
+                 place: type === 'perforated' ? place : undefined, perforated: type === 'perforated', solids: sol });
         }
       });
     }
@@ -712,16 +805,16 @@ function build(params) {
   // ---------------- one sheet clamped between neighbouring frames
   if (G.plateT > 0) {
     for (let i = 0; i < N - 1; i++) {
-      const y0 = G.rowY[i] + D, t = G.plateT, holes = [];
+      const y0 = G.rowY[i] + D, t = G.plateT, holes = [], hs = P.holes.middle;
       if (P.wallMiddle === 'perforated') for (const [xa, xb] of G.bays) {
-        const w = xb - xa, hh = zTopU - zFloor, g = holeGrid(w, hh, P);
-        for (const du of g.us) for (const dv of g.vs) holes.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]);
+        const w = xb - xa, hh = zTopU - zFloor;
+        for (const [du, dv] of holePattern(w, hh, hs)) holes.push([zFloor + hh / 2 + dv, xa + w / 2 + du, hs.d / 2]);
       }
       const nAir = holes.length;
       if (G.bolted) for (const xb of [P.joinBoltInset, L - P.joinBoltInset]) holes.push([H - h, xb, 5.5]);
       parts.push({ name: `J S8 sheet between rows ${rowLabel(i + 1, N)}${rowLabel(i, N)}`, module: 'J', group: 'body', kind: nAir ? 'perf' : 'sheet', mark: 'S8',
-        stock: `Sheet ${t.toFixed(1)}`, size: [L, H + P.tRoof], holes: nAir,
-        note: 'clamped between the frames' + (nAir ? `, ${nAir} x ${P.holeD} holes` : '') + (G.bolted ? ', 2 x 11 bolt holes' : ''),
+        stock: `Sheet ${t.toFixed(1)}`, size: [L, H + P.tRoof], holes: nAir, place: 'middle', perforated: P.wallMiddle === 'perforated',
+        note: 'clamped between the frames' + (nAir ? `, ${nAir} x ${fmt0(hs.d)} holes` : '') + (G.bolted ? ', 2 x 11 bolt holes' : ''),
         solids: [plateP('y', y0, y0 + t, [0, H + P.tRoof], [0, L], holes)] });
     }
   }
@@ -839,7 +932,7 @@ function bom(model) {
   for (const p of model.parts) {
     if (!p.mark) continue;
     const key = [p.mark, p.stock || '', JSON.stringify(p.size || ''), p.note || '', p.material || ''].join('|');
-    if (!rows.has(key)) rows.set(key, { mark: p.mark, stock: p.stock, size: p.size, note: p.note, material: p.material, tray: p.tray || null, qty: 0, mass: 0, holes: p.holes || 0, modules: new Set() });
+    if (!rows.has(key)) rows.set(key, { mark: p.mark, stock: p.stock, size: p.size, note: p.note, material: p.material, tray: p.tray || null, qty: 0, mass: 0, holes: p.holes || 0, place: p.place || null, modules: new Set() });
     const r = rows.get(key);
     r.qty += 1; r.mass += partMass(p); r.modules.add(p.module);
   }
@@ -911,7 +1004,6 @@ function nest(pieces, W, H, gap) {
   }
   return bins.map(b => ({ placed: b.placed }));
 }
-const fmt0 = (v) => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
 const A_SMALL = (P) => P.shs < 30;
 function summary(model) {
   const { P, G, parts } = model;
@@ -949,7 +1041,7 @@ function summary(model) {
   else if (sideRoom < stickOut) warnings.push({ level: 'warn', text: `Hinges and latches stick out ${Math.round(stickOut)} past the cage ends but only ${fmt0(sideRoom)} is left to the tray edge.` });
   else if (sideRoom < P.trayGapSide - 0.5) warnings.push({ level: 'warn', text: `Only ${fmt0(sideRoom)} each side to the tray edge, less than the ${fmt0(P.trayGapSide)} you asked for.` });
   if (P.joinBoltsDropped) warnings.push({ level: 'warn', text: 'No room for join bolts between the roof bars, so the rows are not bolted together. Use fewer roof bars or clamp the rows.' });
-  if (P.holePitchWanted) warnings.push({ level: 'warn', text: `Air holes spaced at ${Math.round(P.holePitch)} instead of ${Math.round(P.holePitchWanted)}, to keep the hole count under ${MAX_HOLES}.` });
+  if (P.holeScale) warnings.push({ level: 'warn', text: `Air holes spread out to ${Math.round(P.holeScale * 100)}% of the spacing you set, to keep the hole count under ${MAX_HOLES}.` });
   if (G.hingeReach < 1) warnings.push({ level: 'warn', text: `The ${G.hingeD} mm hinge barrels barely reach past the tube corners with a ${P.doorGap} mm door gap. Use a smaller gap or bigger hinges.` });
   for (const side of ['L', 'R']) for (let r = 0; r < P.rows - 1; r++) {
     if (P.hinges[r][side] === 'rear' && P.hinges[r + 1][side] === 'front')
@@ -964,7 +1056,12 @@ function summary(model) {
   if (G.clearPastDoor < 380) warnings.push({ level: 'warn', text: `Door opening is only about ${Math.round(G.clearPastDoor)} wide past the open door.` });
   if (G.clearH < 600) warnings.push({ level: 'warn', text: `Clear height inside is ${Math.round(G.clearH)}. Check your dogs can stand with their heads up.` });
   if (G.clearL < 650) warnings.push({ level: 'warn', text: `Each compartment is only ${Math.round(G.clearL)} long inside.` });
-  for (const r of b) if ((r.mark === 'S5' || r.mark === 'S6') && r.holes === 0) warnings.push({ level: 'warn', text: `No air holes fit in ${r.mark} panels with this hole size, pitch and margin.` });
+  { // panels meant to have holes where the arrangement leaves none
+    const words = { front: 'the front-face panels', middle: 'the panels between rows', rear: 'the rear-face panels', divider: 'the dividers', roof: 'the roof' };
+    const empty = [...new Set(parts.filter(p => p.perforated && !p.holes).map(p => p.place))];
+    for (const k of empty) warnings.push({ level: 'warn', text: `No air holes fit in ${words[k]} with that hole size, spacing and border.` });
+  }
+  if (P.roofType === 'perforated') warnings.push({ level: 'info', text: 'Rain comes in through roof holes: keep the cages under a canopy or fit a cover over the holes.' });
   for (const k of Object.keys(nests)) for (const s of nests[k]) for (const pl of s.placed) if (pl.oversize) warnings.push({ level: 'warn', text: `A ${pl.mark} panel is bigger than a ${P.sheetW} x ${P.sheetH} sheet; it will need joining or a larger sheet.` });
   // materials: mass by material, and the same design all in steel or all in aluminium
   const byMat = {};
@@ -1232,7 +1329,7 @@ function writeSTEP(model, opts) {
 }
 
 const api = { DEFAULTS, MATERIALS, MAT_DEFAULTS, KINDS, ROW_JOINS, TREAD_MASS, SHS_SIZES, SHS_WALLS, kindOf, metalOf, gradeText, faceSpec, partMaterial, partFinish, materialText, colourOf,
-  partVolume, normParams, derived, build, bom, masses, summary, writeSTEP, partMass, prismVolume, wirePositions, holeGrid,
+  partVolume, normParams, derived, build, bom, masses, summary, writeSTEP, partMass, prismVolume, wirePositions, holePattern, holeText, normHoles, HOLE_PANELS, HOLE_DEFAULT, MAX_HOLES, holePlaces,
   loopPolyline, loopArea, to3, rowLabel, COLORS, FINISH_COLORS, HINGE_D, HINGE_L, HINGE_END, LATCH, DENSITY, ffd, nest };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.CageCore = api;

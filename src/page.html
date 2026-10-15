@@ -17,6 +17,7 @@
   --viewer: #e3e6e1;
   --good: #2c7146; --warn: #9a5700; --bad: #b0281f;
   --warn-soft: #f6e7cf; --bad-soft: #f5dcd8; --info-soft: #e6e9e4;
+  --sheet: #c7ccc6;       /* sheet metal in the hole preview */
   --display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
@@ -27,6 +28,7 @@
     --bg: #141719; --panel: #1b1f22; --ink: #e6e9e5; --muted: #9ba4aa; --line: #2f363a;
     --accent: #eea83d; --accent-soft: #3a2c15; --on-accent: #1a1206; --viewer: #20252a;
     --good: #6cc48d; --warn: #f0b154; --bad: #ff8a7e; --warn-soft: #3a2c15; --bad-soft: #3d1e1b; --info-soft: #24292c;
+    --sheet: #4b5257;
     color-scheme: dark;
   }
 }
@@ -34,11 +36,13 @@
   --bg: #141719; --panel: #1b1f22; --ink: #e6e9e5; --muted: #9ba4aa; --line: #2f363a;
   --accent: #eea83d; --accent-soft: #3a2c15; --on-accent: #1a1206; --viewer: #20252a;
   --good: #6cc48d; --warn: #f0b154; --bad: #ff8a7e; --warn-soft: #3a2c15; --bad-soft: #3d1e1b; --info-soft: #24292c;
+  --sheet: #4b5257;
   color-scheme: dark;
 }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.4; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -90,6 +94,17 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
 .fit-row .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
 .fit-row .btn svg { width: 16px; height: 16px; }
 .check input:disabled + span { color: var(--muted); }
+.hole-tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.hole-tabs button { flex: 1 1 auto; border: 0; border-left: 1px solid var(--line); background: var(--bg); padding: 6px 8px; font-size: 13px; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.hole-tabs button:first-child { border-left: 0; }
+.hole-tabs button[aria-selected="true"] { background: var(--ink); color: var(--panel); }
+.hole-tabs .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); visibility: hidden; }
+.hole-tabs button.on .dot { visibility: visible; }
+.hole-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.hole-fig { margin: 0; display: grid; gap: 4px; }
+.hole-fig svg { display: block; width: 100%; height: auto; max-height: 230px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); }
+.hole-fig figcaption { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.btn.small { font-size: 12.5px; padding: 4px 9px; }
 .check input { width: 17px; height: 17px; accent-color: var(--accent); }
 
 .hinge-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 10px; align-items: center; }
@@ -203,9 +218,30 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
           <div class="field stack"><label for="rowJoin">How rows join</label><select id="rowJoin"><option value="separate">Separate frames, a wall each</option><option value="sandwich">Separate frames, one sheet between</option><option value="shared2">Shared frame, a wall each side</option><option value="shared">Shared frame, one wall</option></select><small id="join-note"></small></div>
           <div class="field"><label for="wallRear">Rear face, toward tailgate</label><select id="wallRear"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option><option value="mesh">Weldmesh</option></select></div>
           <div class="field"><label for="divider">Between the two dogs</label><select id="divider"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option></select></div>
-          <div class="field"><label for="holeD">Air hole size</label><div class="num"><input id="holeD" type="number" min="10" max="80" step="1" inputmode="numeric"><span>Ø mm</span></div></div>
-          <div class="field"><label for="holePitch">Air hole spacing</label><div class="num"><input id="holePitch" type="number" min="20" max="250" step="5" inputmode="numeric"><span>mm</span></div></div>
-          <div class="field"><label for="holeMargin">Plain border round holes</label><div class="num"><input id="holeMargin" type="number" min="5" max="200" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="roofType">Roof</label><select id="roofType"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option></select></div>
+          <div class="hint">Set out the holes for each panel in Air holes.</div>
+        </div>
+      </details>
+      <details class="grp" open>
+        <summary>Air holes <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="hole-tabs" id="hole-tabs" role="tablist" aria-label="Panel to set out">
+            <button type="button" role="tab" data-panel="front" aria-selected="false" title="Front face, toward the cab">Front<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="middle" aria-selected="false" title="Between rows">Middle<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="rear" aria-selected="false" title="Rear face, toward the tailgate">Rear<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="divider" aria-selected="false" title="Between the two dogs">Divider<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="roof" aria-selected="false" title="Roof">Roof<i class="dot"></i></button>
+          </div>
+          <div class="hole-status"><span id="hole-status"></span><button type="button" class="btn small" id="hole-use" hidden>Use holes here</button></div>
+          <figure class="hole-fig"><svg id="hole-preview" role="img" aria-label="Hole layout on the panel" preserveAspectRatio="xMidYMid meet"></svg><figcaption id="hole-count"></figcaption></figure>
+          <div class="field"><label for="h-pattern">Pattern</label><select id="h-pattern"><option value="grid">Straight rows</option><option value="stagger">Staggered</option></select></div>
+          <div class="field" id="h-area-f"><label for="h-area">Where</label><select id="h-area"><option value="all">Whole panel</option><option value="top">Top rows only</option><option value="topbottom">Top and bottom rows</option></select></div>
+          <div class="field" id="h-rows-f"><label for="h-rows">Rows in each band</label><div class="num"><input id="h-rows" type="number" min="1" max="12" step="1" inputmode="numeric"><span>no.</span></div></div>
+          <div class="field"><label for="h-d">Hole size</label><div class="num"><input id="h-d" type="number" min="6" max="80" step="1" inputmode="decimal"><span>Ø mm</span></div></div>
+          <div class="field"><label for="h-px">Spacing across</label><div class="num"><input id="h-px" type="number" min="12" max="300" step="1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><label for="h-py" id="h-py-lab">Spacing up</label><div class="num"><input id="h-py" type="number" min="12" max="300" step="1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><div><label for="h-margin">Plain border</label><small>Panel edge to the nearest hole.</small></div><div class="num"><input id="h-margin" type="number" min="5" max="200" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="row-btns"><button type="button" class="btn" id="h-copy">Use these holes on every panel</button></div>
         </div>
       </details>
       <details class="grp" open>

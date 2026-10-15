@@ -23,6 +23,7 @@
   --viewer: #e3e6e1;
   --good: #2c7146; --warn: #9a5700; --bad: #b0281f;
   --warn-soft: #f6e7cf; --bad-soft: #f5dcd8; --info-soft: #e6e9e4;
+  --sheet: #c7ccc6;       /* sheet metal in the hole preview */
   --display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
   --body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
@@ -33,6 +34,7 @@
     --bg: #141719; --panel: #1b1f22; --ink: #e6e9e5; --muted: #9ba4aa; --line: #2f363a;
     --accent: #eea83d; --accent-soft: #3a2c15; --on-accent: #1a1206; --viewer: #20252a;
     --good: #6cc48d; --warn: #f0b154; --bad: #ff8a7e; --warn-soft: #3a2c15; --bad-soft: #3d1e1b; --info-soft: #24292c;
+    --sheet: #4b5257;
     color-scheme: dark;
   }
 }
@@ -40,11 +42,13 @@
   --bg: #141719; --panel: #1b1f22; --ink: #e6e9e5; --muted: #9ba4aa; --line: #2f363a;
   --accent: #eea83d; --accent-soft: #3a2c15; --on-accent: #1a1206; --viewer: #20252a;
   --good: #6cc48d; --warn: #f0b154; --bad: #ff8a7e; --warn-soft: #3a2c15; --bad-soft: #3d1e1b; --info-soft: #24292c;
+  --sheet: #4b5257;
   color-scheme: dark;
 }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.4; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -96,6 +100,17 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
 .fit-row .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
 .fit-row .btn svg { width: 16px; height: 16px; }
 .check input:disabled + span { color: var(--muted); }
+.hole-tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.hole-tabs button { flex: 1 1 auto; border: 0; border-left: 1px solid var(--line); background: var(--bg); padding: 6px 8px; font-size: 13px; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.hole-tabs button:first-child { border-left: 0; }
+.hole-tabs button[aria-selected="true"] { background: var(--ink); color: var(--panel); }
+.hole-tabs .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); visibility: hidden; }
+.hole-tabs button.on .dot { visibility: visible; }
+.hole-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.hole-fig { margin: 0; display: grid; gap: 4px; }
+.hole-fig svg { display: block; width: 100%; height: auto; max-height: 230px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); }
+.hole-fig figcaption { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.btn.small { font-size: 12.5px; padding: 4px 9px; }
 .check input { width: 17px; height: 17px; accent-color: var(--accent); }
 
 .hinge-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 10px; align-items: center; }
@@ -210,9 +225,30 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
           <div class="field stack"><label for="rowJoin">How rows join</label><select id="rowJoin"><option value="separate">Separate frames, a wall each</option><option value="sandwich">Separate frames, one sheet between</option><option value="shared2">Shared frame, a wall each side</option><option value="shared">Shared frame, one wall</option></select><small id="join-note"></small></div>
           <div class="field"><label for="wallRear">Rear face, toward tailgate</label><select id="wallRear"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option><option value="mesh">Weldmesh</option></select></div>
           <div class="field"><label for="divider">Between the two dogs</label><select id="divider"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option></select></div>
-          <div class="field"><label for="holeD">Air hole size</label><div class="num"><input id="holeD" type="number" min="10" max="80" step="1" inputmode="numeric"><span>Ø mm</span></div></div>
-          <div class="field"><label for="holePitch">Air hole spacing</label><div class="num"><input id="holePitch" type="number" min="20" max="250" step="5" inputmode="numeric"><span>mm</span></div></div>
-          <div class="field"><label for="holeMargin">Plain border round holes</label><div class="num"><input id="holeMargin" type="number" min="5" max="200" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="field"><label for="roofType">Roof</label><select id="roofType"><option value="solid">Solid sheet</option><option value="perforated">Sheet with air holes</option></select></div>
+          <div class="hint">Set out the holes for each panel in Air holes.</div>
+        </div>
+      </details>
+      <details class="grp" open>
+        <summary>Air holes <i class="chev"></i></summary>
+        <div class="grp-body">
+          <div class="hole-tabs" id="hole-tabs" role="tablist" aria-label="Panel to set out">
+            <button type="button" role="tab" data-panel="front" aria-selected="false" title="Front face, toward the cab">Front<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="middle" aria-selected="false" title="Between rows">Middle<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="rear" aria-selected="false" title="Rear face, toward the tailgate">Rear<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="divider" aria-selected="false" title="Between the two dogs">Divider<i class="dot"></i></button>
+            <button type="button" role="tab" data-panel="roof" aria-selected="false" title="Roof">Roof<i class="dot"></i></button>
+          </div>
+          <div class="hole-status"><span id="hole-status"></span><button type="button" class="btn small" id="hole-use" hidden>Use holes here</button></div>
+          <figure class="hole-fig"><svg id="hole-preview" role="img" aria-label="Hole layout on the panel" preserveAspectRatio="xMidYMid meet"></svg><figcaption id="hole-count"></figcaption></figure>
+          <div class="field"><label for="h-pattern">Pattern</label><select id="h-pattern"><option value="grid">Straight rows</option><option value="stagger">Staggered</option></select></div>
+          <div class="field" id="h-area-f"><label for="h-area">Where</label><select id="h-area"><option value="all">Whole panel</option><option value="top">Top rows only</option><option value="topbottom">Top and bottom rows</option></select></div>
+          <div class="field" id="h-rows-f"><label for="h-rows">Rows in each band</label><div class="num"><input id="h-rows" type="number" min="1" max="12" step="1" inputmode="numeric"><span>no.</span></div></div>
+          <div class="field"><label for="h-d">Hole size</label><div class="num"><input id="h-d" type="number" min="6" max="80" step="1" inputmode="decimal"><span>Ø mm</span></div></div>
+          <div class="field"><label for="h-px">Spacing across</label><div class="num"><input id="h-px" type="number" min="12" max="300" step="1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><label for="h-py" id="h-py-lab">Spacing up</label><div class="num"><input id="h-py" type="number" min="12" max="300" step="1" inputmode="decimal"><span>mm</span></div></div>
+          <div class="field"><div><label for="h-margin">Plain border</label><small>Panel edge to the nearest hole.</small></div><div class="num"><input id="h-margin" type="number" min="5" max="200" step="5" inputmode="numeric"><span>mm</span></div></div>
+          <div class="row-btns"><button type="button" class="btn" id="h-copy">Use these holes on every panel</button></div>
         </div>
       </details>
       <details class="grp" open>
@@ -260,7 +296,7 @@ select { border: 1px solid var(--line); border-radius: var(--r); background: var
           <button type="button" class="btn" id="reset">Reset to the 2 x 2 design</button>
           <input type="file" id="load-file" accept="application/json,.json" hidden>
         </div>
-        <div class="hint" id="build-tag">Version b319860, built 13 Oct 2026 19:07 UTC</div>
+        <div class="hint" id="build-tag">Version 61eb4a9, built 15 Oct 2026 00:34 UTC</div>
       </div>
     </aside>
 
@@ -726,6 +762,10 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 'use strict';
 
 /* ------------------------------------------------------------------ defaults */
+// air holes: one arrangement for each panel position that can have them
+const HOLE_PANELS = ['front', 'middle', 'rear', 'divider', 'roof'];
+const HOLE_DEFAULT = { pattern: 'grid', area: 'all', rows: 2, d: 30, px: 75, py: 75, margin: 45 };
+const HOLE_WEB = 5; // least metal left between neighbouring holes
 const DEFAULTS = {
   rows: 2,               // modules front-to-back (each holds 2 dogs side by side)
   width: 1700,           // overall width across the ute
@@ -748,7 +788,9 @@ const DEFAULTS = {
   wallMiddle: 'perforated', // walls between rows
   rowJoin: 'separate',   // how rows meet: separate | sandwich | shared2 | shared (see ROW_JOINS)
   divider: 'solid',      // between the two dogs of a row: solid | perforated
-  holeD: 30, holePitch: 75, holeMargin: 45,
+  roofType: 'solid',     // solid | perforated
+  // pattern grid | stagger; area all | top | topbottom (rows in each band); d hole size; px, py spacing across and up; margin plain border
+  holes: Object.fromEntries(HOLE_PANELS.map(k => [k, Object.assign({}, HOLE_DEFAULT)])),
   meshPitch: 50, meshWire: 4, meshEdge: 25,
   doorGap: 5,
   hinges: [],            // per row from the front: {L:'rear'|'front', R:'rear'|'front'}
@@ -819,6 +861,7 @@ const MATERIALS = {
   plastic: { label: 'Plastic', short: 'plastic', density: 1.2e-6, E: 2e3 },
 };
 const SHEET_KINDS = ['floor', 'roof', 'sheet', 'perf'];
+const fmt0 = (v) => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
 const SHS_SIZES = [20, 25, 30, 35, 40], SHS_WALLS = [1.6, 2.0, 2.5, 3.0]; // the sections offered on the page
 // the chosen grade for 'frame' or 'sheet' (falls back to the first one offered for the material)
 function kindOf(P, which) {
@@ -849,13 +892,13 @@ function normParams(p) {
   num('trayWidth', 500, 3000); num('trayLength', 500, 4000);
   num('trayGapSide', 0, 500); num('trayGapFront', 0, 2000); num('trayGapRear', 0, 2000);
   num('shs', 20, 50); num('shsT', 1.2, 4); num('tFloor', 1, 5); num('tSheet', 0.8, 4); num('tRoof', 0.8, 4);
-  num('holeD', 10, 80); num('holePitch', 20, 250); num('holeMargin', 5, 200);
+  P.holes = normHoles(p);
+  if (!['solid', 'perforated'].includes(P.roofType)) P.roofType = 'solid';
   num('meshPitch', 20, 150); num('meshWire', 2, 8); num('meshEdge', 5, 100);
   num('doorGap', 2, 8); num('joists', 0, 6); num('roofBars', 0, 4);
   num('trayBoltInset', 40, 400); num('joinBoltInset', 60, 600); num('notchClear', 0, 15);
   num('stockLength', 3000, 12000); num('kerf', 0, 6); num('sheetW', 500, 6000); num('sheetH', 500, 3000);
   P.joists = Math.round(P.joists); P.roofBars = Math.round(P.roofBars);
-  if (P.holePitch < Math.max(P.holeD + 10, 25)) P.holePitch = Math.max(P.holeD + 10, 25); // keeps the hole count sane
   for (const k of ['wallFront', 'wallRear', 'wallMiddle']) if (!['solid', 'perforated', 'mesh'].includes(P[k])) P[k] = DEFAULTS[k];
   if (!['solid', 'perforated'].includes(P.divider)) P.divider = 'solid';
   for (const k of ['frameMat', 'sheetMat']) if (!['steel', 'aluminium'].includes(P[k])) P[k] = 'steel';
@@ -1143,14 +1186,62 @@ function wirePositions(span, P) {
   for (let i = 0; i <= n; i++) out.push((-n / 2 + i) * P.meshPitch);
   return out;
 }
-function holeGrid(w, h, P) { // centred hole pattern in a w x h panel; returns offsets from the panel centre
-  const m = P.holeMargin + P.holeD / 2;
-  const nu = Math.floor((w - 2 * m) / P.holePitch + 1e-9), nv = Math.floor((h - 2 * m) / P.holePitch + 1e-9);
-  const us = [], vs = [];
-  if (nu < 0 || nv < 0) return { us, vs };
-  for (let i = 0; i <= nu; i++) us.push((-nu / 2 + i) * P.holePitch);
-  for (let j = 0; j <= nv; j++) vs.push((-nv / 2 + j) * P.holePitch);
-  return { us, vs };
+// one hole arrangement, clamped so the holes keep at least HOLE_WEB of metal between them
+function normHoleSpec(s, panel) {
+  const num = (v, lo, hi, d) => { v = Number(v); if (!isFinite(v)) v = d; return Math.min(hi, Math.max(lo, v)); };
+  const o = {
+    pattern: s.pattern === 'stagger' ? 'stagger' : 'grid',
+    area: panel !== 'roof' && ['top', 'topbottom'].includes(s.area) ? s.area : 'all',
+    rows: Math.round(num(s.rows, 1, 12, HOLE_DEFAULT.rows)),
+    d: num(s.d, 6, 80, HOLE_DEFAULT.d), px: num(s.px, 12, 300, HOLE_DEFAULT.px), py: num(s.py, 12, 300, HOLE_DEFAULT.py),
+    margin: num(s.margin, 5, 200, HOLE_DEFAULT.margin),
+  };
+  const gap = o.d + HOLE_WEB;
+  o.px = Math.max(o.px, gap);
+  // staggered rows may sit closer than the hole spacing, as long as the diagonal neighbours keep their web
+  o.py = o.pattern === 'stagger' ? Math.max(o.py, Math.ceil(gap / 2), Math.ceil(Math.sqrt(Math.max(0, gap * gap - o.px * o.px / 4)))) : Math.max(o.py, gap);
+  return o;
+}
+// every panel's arrangement; settings from before arrangements existed (holeD, holePitch, holeMargin) apply to all panels
+function normHoles(p) {
+  p = p || {};
+  const legacy = {};
+  if (p.holeD !== undefined) legacy.d = p.holeD;
+  if (p.holePitch !== undefined) { legacy.px = p.holePitch; legacy.py = p.holePitch; }
+  if (p.holeMargin !== undefined) legacy.margin = p.holeMargin;
+  const given = p.holes && typeof p.holes === 'object' ? p.holes : {};
+  const out = {};
+  for (const k of HOLE_PANELS) out[k] = normHoleSpec(Object.assign({}, HOLE_DEFAULT, legacy, given[k] && typeof given[k] === 'object' ? given[k] : {}), k);
+  return out;
+}
+// hole centres in a w (across) x h (up) panel, as offsets [du, dv] from the panel centre
+function holePattern(w, h, spec) {
+  const m = spec.margin + spec.d / 2;          // panel edge to the nearest hole centre
+  const uw = w - 2 * m, vh = h - 2 * m;
+  if (uw < -1e-9 || vh < -1e-9) return [];
+  const nu = Math.floor(Math.max(0, uw) / spec.px + 1e-9);   // nu + 1 holes across
+  const total = Math.floor(Math.max(0, vh) / spec.py + 1e-9) + 1; // rows that fit
+  const rows = []; // [v, parity]
+  const n = Math.min(spec.rows, total);
+  if (spec.area === 'all' || (spec.area === 'topbottom' && 2 * n > total)) {
+    for (let j = 0; j < total; j++) rows.push([((total - 1) / 2 - j) * spec.py, j % 2]);
+  } else {
+    for (let j = 0; j < n; j++) rows.push([h / 2 - m - j * spec.py, j % 2]);
+    if (spec.area === 'topbottom') for (let j = 0; j < n; j++) rows.push([-h / 2 + m + j * spec.py, j % 2]);
+  }
+  const out = [];
+  for (const [v, par] of rows) {
+    const off = spec.pattern === 'stagger' && par === 1; // staggered rows sit half a space across, one hole fewer
+    const k = off ? nu : nu + 1;
+    for (let i = 0; i < k; i++) out.push([(-nu / 2 + i + (off ? 0.5 : 0)) * spec.px, v]);
+  }
+  return out;
+}
+// short description of an arrangement, e.g. "Ø30 @ 75 staggered, top 2 rows"
+function holeText(spec) {
+  const sp = Math.abs(spec.px - spec.py) < 0.5 ? `${fmt0(spec.px)}` : `${fmt0(spec.px)} x ${fmt0(spec.py)}`;
+  const where = spec.area === 'top' ? `, top ${spec.rows} ${spec.rows === 1 ? 'row' : 'rows'}` : spec.area === 'topbottom' ? `, ${spec.rows} ${spec.rows === 1 ? 'row' : 'rows'} top and bottom` : '';
+  return `Ø${fmt0(spec.d)} @ ${sp}${spec.pattern === 'stagger' ? ' staggered' : ''}${where}`;
 }
 function rowLabel(i, N) { return String.fromCharCode(65 + (N - 1 - i)); } // i = 0 rear -> label from the front
 
@@ -1183,8 +1274,12 @@ function derived(P) {
   for (let i = 0; i < N - 1; i++) joints.push(shared ? rowY[i + 1] + h : rowY[i] + D + plateT / 2);
   // keepers on a shared post get half its depth each (both neighbouring doors use that post)
   const halfKeeper = [6, 8, 10, 12, 16, 20].filter(w => w <= h - 1).pop() || 6;
+  // open bays of the top frame across the cage: roof holes go only there, clear of the rails, bars and centre cross
+  const tops = [[0, A], [XC - h, XC + h], [L - A, L]].concat(roofC.map(c => [c - h, c + h]), roofC.map(c => [L - c - h, L - c + h])).sort((a, b) => a[0] - b[0]);
+  const roofBays = [];
+  for (let k = 0; k < tops.length - 1; k++) if (tops[k + 1][0] - tops[k][1] > 1) roofBays.push([tops[k][1], tops[k + 1][0]]);
   return {
-    N, shared, sandwich, plateT, pitch, rowY, joints, Ltot: N ? (N - 1) * pitch + D : 0,
+    N, shared, sandwich, plateT, pitch, rowY, joints, Ltot: N ? (N - 1) * pitch + D : 0, roofBays,
     bolted: !shared && P.joinBolts && N > 1, betweenDogs: shared ? A : 2 * A + plateT, halfKeeper,
     crush, trayBoltD: crush ? crush.bolt : 8, shsFlat: flat,
     // steel and aluminium can't be welded together: infills become folded trays riveted into the frame
@@ -1224,6 +1319,27 @@ function faceSpec(P, G, i, face) {
   return { type: t, style: 'infill' };
 }
 
+// where each hole arrangement is used: panels (one per bay for walls) and the mark of walls with holes
+function holePlaces(P, G) {
+  const N = P.rows, out = {};
+  for (const k of HOLE_PANELS) out[k] = { used: false, panels: 0, style: null, mark: null };
+  for (let i = 0; i < N; i++) for (const face of ['rear', 'front']) {
+    const f = faceSpec(P, G, i, face);
+    if (!f || f.type !== 'perforated') continue;
+    const place = face === 'rear' && i === 0 ? 'rear' : face === 'front' && i === N - 1 ? 'front' : 'middle';
+    out[place].used = true; out[place].panels += 2; out[place].style = f.style;
+    out[place].mark = f.style === 'centre' ? 'S7' : 'S5';
+  }
+  if (G.plateT && P.wallMiddle === 'perforated') Object.assign(out.middle, { used: true, panels: 2 * (N - 1), style: 'plate', mark: 'S8' });
+  if (P.divider === 'perforated') Object.assign(out.divider, { used: true, panels: N, mark: 'S6' });
+  if (P.roofType === 'perforated') Object.assign(out.roof, { used: true, panels: N, mark: 'S2' });
+  // walls with holes share S5 while their arrangements match; different arrangements become S5a, S5b, S5c
+  const infill = ['front', 'middle', 'rear'].filter(k => out[k].used && out[k].style === 'infill');
+  const keys = [...new Set(infill.map(k => JSON.stringify(P.holes[k])))];
+  if (keys.length > 1) for (const k of infill) out[k].mark = 'S5' + 'abc'[keys.indexOf(JSON.stringify(P.holes[k]))];
+  return out;
+}
+
 function build(params) {
   const P = normParams(params);
   const G = derived(P);
@@ -1237,20 +1353,25 @@ function build(params) {
     if (best === null) { P.joinBolts = false; P.joinBoltsDropped = true; G.bolted = false; }
     else if (Math.abs(best - P.joinBoltInset) > 1e-9) { P.joinBoltMoved = P.joinBoltInset; P.joinBoltInset = best; }
   }
-  // cap the number of air holes so the model, viewer and STEP stay workable
+  // cap the number of air holes so the model, viewer and STEP stay workable: spread every arrangement out evenly
   {
-    const per = (w, hh) => { const g = holeGrid(w, hh, P); return g.us.length * g.vs.length; };
-    const count = () => {
+    const used = holePlaces(P, G), bw = G.XC - G.h - G.A;
+    const count = (sc) => {
+      const sp = (k) => Object.assign({}, P.holes[k], { px: P.holes[k].px * sc, py: P.holes[k].py * sc });
       let n = 0;
-      for (let i = 0; i < P.rows; i++) {
-        for (const face of ['rear', 'front']) { const f = faceSpec(P, G, i, face); if (f && f.type === 'perforated') n += 2 * per(G.XC - G.h - G.A, G.openH); }
-        if (P.divider === 'perforated') n += per(G.openW, G.openH);
-      }
-      if (G.plateT && P.wallMiddle === 'perforated') n += (P.rows - 1) * 2 * per(G.XC - G.h - G.A, G.openH);
+      for (const k of ['front', 'middle', 'rear']) if (used[k].used) n += used[k].panels * holePattern(bw, G.openH, sp(k)).length;
+      if (used.divider.used) n += used.divider.panels * holePattern(G.openW, G.openH, sp('divider')).length;
+      if (used.roof.used) n += used.roof.panels * G.roofBays.reduce((a, [x0, x1]) => a + holePattern(x1 - x0, G.D - 2 * G.A, sp('roof')).length, 0);
       return n;
     };
-    if (count() > MAX_HOLES) { P.holePitchWanted = P.holePitch; while (count() > MAX_HOLES) P.holePitch += 5; }
+    if (count(1) > MAX_HOLES) {
+      let sc = 1;
+      while (count(sc) > MAX_HOLES && sc < 50) sc *= 1.05;
+      P.holeScale = sc;
+      for (const k of HOLE_PANELS) P.holes[k] = Object.assign({}, P.holes[k], { px: Math.ceil(P.holes[k].px * sc), py: Math.ceil(P.holes[k].py * sc) });
+    }
   }
+  const places = holePlaces(P, G);
   const { A, h, L, D, H, XC, zFloor, zTopU } = G;
   const N = P.rows;
   const parts = [];
@@ -1329,27 +1450,32 @@ function build(params) {
            note: (G.shared ? 'ends on the rail centre lines, ' : '') + (P.trayBolts && G.trayBoltJoist !== null ? 'post notches + bolt holes' : 'post notches'),
            massFactor: tread ? TREAD_MASS : 1, tread, solids: [prism([0, 0, A], X, Y, P.tFloor, floorLoops)] });
     const ry0 = sharedRear ? h : 0, ry1 = sharedFront ? D - h : D;
-    add_({ name: 'roof', kind: 'roof', mark: 'S2', stock: `Sheet ${P.tRoof.toFixed(1)}`, size: [L, ry1 - ry0], note: G.mixed ? 'riveted to top frame' : 'sits on top frame',
-           solids: [boxP(0, L, ry0, ry1, H, H + P.tRoof)] });
+    {
+      // roof holes only over the open bays of the top frame
+      const rs = P.holes.roof, bh = D - 2 * A, rh = [];
+      if (P.roofType === 'perforated') for (const [xa, xb] of G.roofBays) for (const [du, dv] of holePattern(xb - xa, bh, rs)) rh.push([(xa + xb) / 2 + du, A + bh / 2 + dv, rs.d / 2]);
+      add_({ name: 'roof', kind: 'roof', mark: 'S2', stock: `Sheet ${P.tRoof.toFixed(1)}`, size: [L, ry1 - ry0],
+             note: (G.mixed ? 'riveted to top frame' : 'sits on top frame') + (rh.length ? `, ${rh.length} x ${fmt0(rs.d)} holes` : ''),
+             holes: rh.length, place: P.roofType === 'perforated' ? 'roof' : undefined, perforated: P.roofType === 'perforated',
+             solids: [rh.length ? plateP('z', H, H + P.tRoof, [0, L], [ry0, ry1], rh) : boxP(0, L, ry0, ry1, H, H + P.tRoof)] });
+    }
     {
       const w = D - 2 * A, hh = zTopU - zFloor;
       let holes = [];
-      if (P.divider === 'perforated') {
-        const g = holeGrid(w, hh, P);
-        for (const du of g.us) for (const dv of g.vs) holes.push([A + w / 2 + du, zFloor + hh / 2 + dv, P.holeD / 2]);
-      }
+      const hs = P.holes.divider;
+      if (P.divider === 'perforated') for (const [du, dv] of holePattern(w, hh, hs)) holes.push([A + w / 2 + du, zFloor + hh / 2 + dv, hs.d / 2]);
       const t = P.tSheet, sol = [plateP('x', XC - t / 2, XC + t / 2, [A, D - A], [zFloor, zTopU], holes)];
-      let size = [w, hh], note = P.divider === 'perforated' ? `divider, ${holes.length} x ${P.holeD} holes` : 'centre divider infill';
+      let size = [w, hh], note = P.divider === 'perforated' ? `divider, ${holes.length} x ${fmt0(hs.d)} holes` : 'centre divider infill';
       if (G.mixed) { // folded tray: flanges to the right, against the centre posts, cross and floor
         const f = G.divF, x0 = XC + t / 2, x1 = x0 + f;
         sol.push(boxP(x0, x1, A, A + t, zFloor + t, zTopU - t), boxP(x0, x1, D - A - t, D - A, zFloor + t, zTopU - t),
                  boxP(x0, x1, A, D - A, zFloor, zFloor + t), boxP(x0, x1, A, D - A, zTopU - t, zTopU));
         size = [w + 2 * f, hh + 2 * f];
-        note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+        note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${fmt0(hs.d)} holes` : '');
       }
       add_({ name: 'divider', kind: P.divider === 'perforated' ? 'perf' : 'sheet', mark: P.divider === 'perforated' ? 'S6' : 'S3',
              stock: `Sheet ${P.tSheet.toFixed(1)}`, size, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null,
-             holes: holes.length, solids: sol });
+             holes: holes.length, place: 'divider', perforated: P.divider === 'perforated', solids: sol });
     }
 
     // ---------------- long walls
@@ -1357,10 +1483,12 @@ function build(params) {
       const spec = faceSpec(P, G, i, face);
       if (!spec) continue;
       const type = spec.type;
+      const place = face === 'rear' && i === 0 ? 'rear' : face === 'front' && i === N - 1 ? 'front' : 'middle', hs = P.holes[place];
       G.bays.forEach(([xa, xb], bi) => {
         const bay = bi === 0 ? 'left' : 'right';
         const w = xb - xa, hh = zTopU - zFloor;
-        const grid = () => { const out = [], g = holeGrid(w, hh, P); for (const du of g.us) for (const dv of g.vs) out.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]); return out; };
+        // profile coordinates for a plate normal to Y are (z, x)
+        const grid = () => holePattern(w, hh, hs).map(([du, dv]) => [zFloor + hh / 2 + dv, xa + w / 2 + du, hs.d / 2]);
         if (type === 'mesh') {
           const yc = face === 'rear' ? h : D - h;
           const dogSide = face === 'rear' ? 1 : -1;
@@ -1375,31 +1503,32 @@ function build(params) {
           const t = P.tSheet, y0 = h - t / 2;
           const holes = type === 'perforated' ? grid() : [];
           const sol = [plateP('y', y0, y0 + t, [zFloor, zTopU], [xa, xb], holes)];
-          let size = [w, hh], note = holes.length ? `wall between rows, ${holes.length} x ${P.holeD} holes` : 'wall between rows, on the rail centre line';
+          let size = [w, hh], note = holes.length ? `wall between rows, ${holes.length} x ${fmt0(hs.d)} holes` : 'wall between rows, on the rail centre line';
           if (G.mixed) { // folded tray, flanges toward the front against the posts, rail and floor
             const f = G.divF, ya = y0 + t, yb = ya + f;
             sol.push(boxP(xa, xa + t, ya, yb, zFloor + t, zTopU - t), boxP(xb - t, xb, ya, yb, zFloor + t, zTopU - t),
                      boxP(xa, xb, ya, yb, zFloor, zFloor + t), boxP(xa, xb, ya, yb, zTopU - t, zTopU));
             size = [w + 2 * f, hh + 2 * f];
-            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${fmt0(hs.d)} holes` : '');
           }
           add_({ name: `rear wall ${bay} shared ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: 'S7',
-                 stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null, solids: sol });
+                 stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.divF, face: [w, hh] } : null,
+                 place, perforated: type === 'perforated', solids: sol });
         } else {
           const y0 = face === 'rear' ? A - P.tSheet : D - A;
           const holes = type === 'perforated' ? grid() : [];
           const t = P.tSheet, sol = [plateP('y', y0, y0 + t, [zFloor, zTopU], [xa, xb], holes)];
-          let size = [w, hh], note = type === 'perforated' ? `wall infill, ${holes.length} x ${P.holeD} holes` : 'wall infill, flush with inside face';
+          let size = [w, hh], note = type === 'perforated' ? `wall infill, ${holes.length} x ${fmt0(hs.d)} holes` : 'wall infill, flush with inside face';
           if (G.mixed) { // folded tray: flanges run back into the frame opening against posts, rail and floor
             const f = G.trayF, ya = face === 'rear' ? y0 - f : y0 + t, yb = ya + f;
             sol.push(boxP(xa, xa + t, ya, yb, zFloor + t, zTopU - t), boxP(xb - t, xb, ya, yb, zFloor + t, zTopU - t),
                      boxP(xa, xb, ya, yb, zFloor, zFloor + t), boxP(xa, xb, ya, yb, zTopU - t, zTopU));
             size = [w + 2 * f, hh + 2 * f];
-            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${P.holeD} holes` : '');
+            note = `folded tray, ${Math.round(f)} flanges, riveted` + (holes.length ? `, ${holes.length} x ${fmt0(hs.d)} holes` : '');
           }
-          add_({ name: `${face} wall ${bay} ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: type === 'perforated' ? 'S5' : 'S4',
+          add_({ name: `${face} wall ${bay} ${type}`, kind: type === 'perforated' ? 'perf' : 'sheet', mark: type === 'perforated' ? places[place].mark : 'S4',
                  stock: `Sheet ${P.tSheet.toFixed(1)}`, size, holes: holes.length, note, tray: G.mixed ? { f: G.trayF, face: [w, hh] } : null,
-                 solids: sol });
+                 place: type === 'perforated' ? place : undefined, perforated: type === 'perforated', solids: sol });
         }
       });
     }
@@ -1433,16 +1562,16 @@ function build(params) {
   // ---------------- one sheet clamped between neighbouring frames
   if (G.plateT > 0) {
     for (let i = 0; i < N - 1; i++) {
-      const y0 = G.rowY[i] + D, t = G.plateT, holes = [];
+      const y0 = G.rowY[i] + D, t = G.plateT, holes = [], hs = P.holes.middle;
       if (P.wallMiddle === 'perforated') for (const [xa, xb] of G.bays) {
-        const w = xb - xa, hh = zTopU - zFloor, g = holeGrid(w, hh, P);
-        for (const du of g.us) for (const dv of g.vs) holes.push([zFloor + hh / 2 + dv, xa + w / 2 + du, P.holeD / 2]);
+        const w = xb - xa, hh = zTopU - zFloor;
+        for (const [du, dv] of holePattern(w, hh, hs)) holes.push([zFloor + hh / 2 + dv, xa + w / 2 + du, hs.d / 2]);
       }
       const nAir = holes.length;
       if (G.bolted) for (const xb of [P.joinBoltInset, L - P.joinBoltInset]) holes.push([H - h, xb, 5.5]);
       parts.push({ name: `J S8 sheet between rows ${rowLabel(i + 1, N)}${rowLabel(i, N)}`, module: 'J', group: 'body', kind: nAir ? 'perf' : 'sheet', mark: 'S8',
-        stock: `Sheet ${t.toFixed(1)}`, size: [L, H + P.tRoof], holes: nAir,
-        note: 'clamped between the frames' + (nAir ? `, ${nAir} x ${P.holeD} holes` : '') + (G.bolted ? ', 2 x 11 bolt holes' : ''),
+        stock: `Sheet ${t.toFixed(1)}`, size: [L, H + P.tRoof], holes: nAir, place: 'middle', perforated: P.wallMiddle === 'perforated',
+        note: 'clamped between the frames' + (nAir ? `, ${nAir} x ${fmt0(hs.d)} holes` : '') + (G.bolted ? ', 2 x 11 bolt holes' : ''),
         solids: [plateP('y', y0, y0 + t, [0, H + P.tRoof], [0, L], holes)] });
     }
   }
@@ -1560,7 +1689,7 @@ function bom(model) {
   for (const p of model.parts) {
     if (!p.mark) continue;
     const key = [p.mark, p.stock || '', JSON.stringify(p.size || ''), p.note || '', p.material || ''].join('|');
-    if (!rows.has(key)) rows.set(key, { mark: p.mark, stock: p.stock, size: p.size, note: p.note, material: p.material, tray: p.tray || null, qty: 0, mass: 0, holes: p.holes || 0, modules: new Set() });
+    if (!rows.has(key)) rows.set(key, { mark: p.mark, stock: p.stock, size: p.size, note: p.note, material: p.material, tray: p.tray || null, qty: 0, mass: 0, holes: p.holes || 0, place: p.place || null, modules: new Set() });
     const r = rows.get(key);
     r.qty += 1; r.mass += partMass(p); r.modules.add(p.module);
   }
@@ -1632,7 +1761,6 @@ function nest(pieces, W, H, gap) {
   }
   return bins.map(b => ({ placed: b.placed }));
 }
-const fmt0 = (v) => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
 const A_SMALL = (P) => P.shs < 30;
 function summary(model) {
   const { P, G, parts } = model;
@@ -1670,7 +1798,7 @@ function summary(model) {
   else if (sideRoom < stickOut) warnings.push({ level: 'warn', text: `Hinges and latches stick out ${Math.round(stickOut)} past the cage ends but only ${fmt0(sideRoom)} is left to the tray edge.` });
   else if (sideRoom < P.trayGapSide - 0.5) warnings.push({ level: 'warn', text: `Only ${fmt0(sideRoom)} each side to the tray edge, less than the ${fmt0(P.trayGapSide)} you asked for.` });
   if (P.joinBoltsDropped) warnings.push({ level: 'warn', text: 'No room for join bolts between the roof bars, so the rows are not bolted together. Use fewer roof bars or clamp the rows.' });
-  if (P.holePitchWanted) warnings.push({ level: 'warn', text: `Air holes spaced at ${Math.round(P.holePitch)} instead of ${Math.round(P.holePitchWanted)}, to keep the hole count under ${MAX_HOLES}.` });
+  if (P.holeScale) warnings.push({ level: 'warn', text: `Air holes spread out to ${Math.round(P.holeScale * 100)}% of the spacing you set, to keep the hole count under ${MAX_HOLES}.` });
   if (G.hingeReach < 1) warnings.push({ level: 'warn', text: `The ${G.hingeD} mm hinge barrels barely reach past the tube corners with a ${P.doorGap} mm door gap. Use a smaller gap or bigger hinges.` });
   for (const side of ['L', 'R']) for (let r = 0; r < P.rows - 1; r++) {
     if (P.hinges[r][side] === 'rear' && P.hinges[r + 1][side] === 'front')
@@ -1685,7 +1813,12 @@ function summary(model) {
   if (G.clearPastDoor < 380) warnings.push({ level: 'warn', text: `Door opening is only about ${Math.round(G.clearPastDoor)} wide past the open door.` });
   if (G.clearH < 600) warnings.push({ level: 'warn', text: `Clear height inside is ${Math.round(G.clearH)}. Check your dogs can stand with their heads up.` });
   if (G.clearL < 650) warnings.push({ level: 'warn', text: `Each compartment is only ${Math.round(G.clearL)} long inside.` });
-  for (const r of b) if ((r.mark === 'S5' || r.mark === 'S6') && r.holes === 0) warnings.push({ level: 'warn', text: `No air holes fit in ${r.mark} panels with this hole size, pitch and margin.` });
+  { // panels meant to have holes where the arrangement leaves none
+    const words = { front: 'the front-face panels', middle: 'the panels between rows', rear: 'the rear-face panels', divider: 'the dividers', roof: 'the roof' };
+    const empty = [...new Set(parts.filter(p => p.perforated && !p.holes).map(p => p.place))];
+    for (const k of empty) warnings.push({ level: 'warn', text: `No air holes fit in ${words[k]} with that hole size, spacing and border.` });
+  }
+  if (P.roofType === 'perforated') warnings.push({ level: 'info', text: 'Rain comes in through roof holes: keep the cages under a canopy or fit a cover over the holes.' });
   for (const k of Object.keys(nests)) for (const s of nests[k]) for (const pl of s.placed) if (pl.oversize) warnings.push({ level: 'warn', text: `A ${pl.mark} panel is bigger than a ${P.sheetW} x ${P.sheetH} sheet; it will need joining or a larger sheet.` });
   // materials: mass by material, and the same design all in steel or all in aluminium
   const byMat = {};
@@ -1953,7 +2086,7 @@ function writeSTEP(model, opts) {
 }
 
 const api = { DEFAULTS, MATERIALS, MAT_DEFAULTS, KINDS, ROW_JOINS, TREAD_MASS, SHS_SIZES, SHS_WALLS, kindOf, metalOf, gradeText, faceSpec, partMaterial, partFinish, materialText, colourOf,
-  partVolume, normParams, derived, build, bom, masses, summary, writeSTEP, partMass, prismVolume, wirePositions, holeGrid,
+  partVolume, normParams, derived, build, bom, masses, summary, writeSTEP, partMass, prismVolume, wirePositions, holePattern, holeText, normHoles, HOLE_PANELS, HOLE_DEFAULT, MAX_HOLES, holePlaces,
   loopPolyline, loopArea, to3, rowLabel, COLORS, FINISH_COLORS, HINGE_D, HINGE_L, HINGE_END, LATCH, DENSITY, ffd, nest };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.CageCore = api;
@@ -3152,7 +3285,8 @@ function pageOverview(doc, M, S, I, info) {
     shared: ` The rows are one welded frame: neighbouring rows share the SHS between them, with one wall of ${wallName[P.wallMiddle]} on its centre line.`,
   }[P.rowJoin];
   const desc = `${N * 2} dog compartments in ${N} ${N === 1 ? 'row' : 'rows'} of two, with a weldmesh door at each end on the sides of the ute.` + joinTxt + ' ' +
-    (P.wallFront === P.wallRear ? `Both outer faces, toward the cab and the tailgate, are ${wallName[P.wallFront]}.` : `The face toward the cab is ${wallName[P.wallFront]} and the face toward the tailgate is ${wallName[P.wallRear]}.`);
+    (P.wallFront === P.wallRear ? `Both outer faces, toward the cab and the tailgate, are ${wallName[P.wallFront]}.` : `The face toward the cab is ${wallName[P.wallFront]} and the face toward the tailgate is ${wallName[P.wallRear]}.`)
+    + (P.roofType === 'perforated' ? ' The roof has air holes over the open bays of the top frame.' : '');
   let y = s.para(x0, 256, s.wrap(desc, 114, 7), { size: 7 });
   const perRow = S.perModule.reduce((a, b) => a + b, 0) / Math.max(1, S.perModule.length);
   const rows = [
@@ -3163,15 +3297,18 @@ function pageOverview(doc, M, S, I, info) {
     ['Mass (approx.)', G.shared ? `${Math.round(S.total)} kg, one welded set` : `${Math.round(perRow)} kg per row, ${Math.round(S.total)} kg set`],
     ['Frame + doors', `SHS ${P.shs} x ${P.shs} x ${Number(P.shsT).toFixed(1)}, ${fw} ${gradeOf(P, 'frame')}`],
     ['Sheets', `${sw}, ${gradeOf(P, 'sheet')}` + (G.mixed ? ', riveted' : '')],
-    ['Front / rear faces', `${wallName[P.wallFront]} / ${wallName[P.wallRear]}`],
   ];
+  const faceTxt = (t, k) => t === 'perforated' ? `holes ${C.holeText(P.holes[k])}` : wallName[t];
+  if (P.wallFront === P.wallRear && (P.wallFront !== 'perforated' || JSON.stringify(P.holes.front) === JSON.stringify(P.holes.rear))) rows.push(['Front and rear faces', faceTxt(P.wallFront, 'front')]);
+  else { rows.push(['Front face (cab)', faceTxt(P.wallFront, 'front')]); rows.push(['Rear face (tailgate)', faceTxt(P.wallRear, 'rear')]); }
   if (N > 1) {
-    rows.push(['Between rows', P.wallMiddle === 'perforated' ? `${P.tSheet} sheet, Ø${f0(P.holeD)} @ ${f0(P.holePitch)} holes` : wallName[P.wallMiddle]]);
+    rows.push(['Between rows', P.wallMiddle === 'perforated' ? `${P.tSheet} sheet, holes ${C.holeText(P.holes.middle)}` : wallName[P.wallMiddle]]);
     rows.push(['Row joints', `${C.ROW_JOINS[P.rowJoin].short}, ${f0(G.betweenDogs)} between dogs`]);
   }
-  rows.push(['Between dogs', P.divider === 'perforated' ? `${P.tSheet} sheet with air holes` : `${P.tSheet} sheet, solid`]);
+  rows.push(['Between dogs', P.divider === 'perforated' ? `${P.tSheet} sheet, holes ${C.holeText(P.holes.divider)}` : `${P.tSheet} sheet, solid`]);
   rows.push(['Doors', `${f0(P.meshPitch)} x ${f0(P.meshPitch)} x ${f0(P.meshWire)} ${C.kindOf(P, 'frame').mesh}`]);
-  rows.push(['Roof / floor', `${P.tRoof} sheet / ${P.tFloor} ${P.floorType === 'tread' ? 'tread plate' : 'sheet'}`]);
+  rows.push(['Roof / floor', `${P.tRoof} sheet${P.roofType === 'perforated' ? ' with holes' : ''} / ${P.tFloor} ${P.floorType === 'tread' ? 'tread plate' : 'sheet'}`]);
+  if (P.roofType === 'perforated') rows.push(['Roof holes', `${C.holeText(P.holes.roof)}, over the open bays`]);
   y -= 2;
   const yb = s.table(x0, y, [['KEY DATA', 42, 'left'], ['', 72, 'left']], rows, { rowH: 4.5, size: 6.3, hsize: 6 });
   s.text(x0, yb - 3, `* under the top frame; ${f0(G.clearHRoof)} between the roof bars`, { size: 5.6, color: GREY });
@@ -3362,6 +3499,7 @@ function pageGA(doc, M, S, I, info) {
     `Clear inside each compartment: ${f0(G.clearL)} long x ${f0(G.clearW)} wide x ${f0(G.clearH)} high under the top frame. Check your biggest dog can stand with its head up, turn round and lie flat.`,
   ];
   if (P.hinges.some(x => x.L === 'rear' || x.R === 'rear')) notes.push('A door hinged on its rear edge will be blown open by the wind if its latch lets go while driving. Pin the latches for travel.');
+  if (P.roofType === 'perforated') notes.push('The roof has air holes, so rain comes in: keep the cages under a canopy or fit a cover over the holes.');
   for (const w of S.warnings.filter(x => /hinge at the same joint|join bolts|crush tube|Air holes spaced|barely reach|keepers sit/i.test(x.text)).slice(0, 3)) notes.push('CHECK: ' + w.text);
   s.text(nx, ny - 7, 'NOTES', { size: 8, weight: 'bold' });
   s.numbered(nx, ny - 12.5, notes, 146, { size: long && N > 4 ? 5.8 : 6.1 });
@@ -3644,44 +3782,70 @@ function pageDoors(doc, M, S, I, info) {
   });
   const fholes = (P.trayBolts && G.trayBoltJoist) ? [G.trayBoltJoist, P.width - G.trayBoltJoist].flatMap(xb => [P.trayBoltInset, D - P.trayBoltInset].map(yb => [xb, yb - fy0, (G.trayBoltD + 1) / 2])) : [];
   const bw = G.XC - h - A, oh = G.openH, ow = G.openW;
-  const grid = (w, hh) => { const gg = C.holeGrid(w, hh, P); const out = []; for (const du of gg.us) for (const dv of gg.vs) out.push([w / 2 + du, hh / 2 + dv, P.holeD / 2]); return out; };
+  // hole centres in a w x hh blank for one arrangement, from its lower-left corner
+  const grid = (w, hh, sp) => C.holePattern(w, hh, sp).map(([du, dv]) => [w / 2 + du, hh / 2 + dv, sp.d / 2]);
+  const places = C.holePlaces(P, G);
+  const placeWord = { front: 'front face', middle: 'between rows', rear: 'rear face' };
   const small = [];
   const ts = `${Number(P.tSheet).toFixed(1)} ${metalShort(P, 'sheet')}`;
   // with mixed metals the infills are folded trays: draw the flat blank (fold lines dashed)
   const tray = (w, hh, f, opt, sub) => G.mixed ? [w + 2 * f, hh + 2 * f, Object.assign({ tray: f, holes: (opt.holes || []).map(c => [c[0] + f, c[1] + f, c[2]]) }, opt.holes ? {} : {}), sub + `, tray: ${f0(f)} flanges`] : [w, hh, opt, sub];
   const addInfill = (w, hh, f, lab, sub, opt) => { const [W2, H2, o2, s2] = tray(w, hh, f, opt, sub); small.push([W2, H2, lab, s2, o2]); };
   if (has('S4')) addInfill(bw, oh, G.trayF, 'S4  SOLID WALL', `${ts}, make ${cntMark('S4')}`, {});
-  if (has('S5')) { const hl = grid(bw, oh); addInfill(bw, oh, G.trayF, 'S5  WALL, AIR HOLES', `${ts}, make ${cntMark('S5')}, ${hl.length} x Ø${f0(P.holeD)} @ ${f0(P.holePitch)}`, { holes: hl }); }
-  if (has('S7')) { const hl = P.wallMiddle === 'perforated' ? grid(bw, oh) : []; addInfill(bw, oh, G.divF, 'S7  WALL BETWEEN ROWS', `${ts}, make ${cntMark('S7')}, on the rail centre line` + (hl.length ? `, ${hl.length} x Ø${f0(P.holeD)}` : ''), hl.length ? { holes: hl } : {}); }
+  // walls with holes: one blank per arrangement (S5, or S5a, S5b, S5c when the faces differ)
+  const s5 = [];
+  for (const k of ['front', 'middle', 'rear']) {
+    const u = places[k];
+    if (!u.used || u.style !== 'infill') continue;
+    const g = s5.find(x => x.mark === u.mark);
+    if (g) g.where.push(placeWord[k]); else s5.push({ mark: u.mark, where: [placeWord[k]], sp: P.holes[k] });
+  }
+  for (const g of s5) { const hl = grid(bw, oh, g.sp); addInfill(bw, oh, G.trayF, `${g.mark}  WALL, AIR HOLES`, `${ts}, make ${cntMark(g.mark)}, ${g.where.join(' + ')}, ${hl.length} x ${C.holeText(g.sp)}`, { holes: hl }); }
+  if (has('S7')) { const hl = P.wallMiddle === 'perforated' ? grid(bw, oh, P.holes.middle) : []; addInfill(bw, oh, G.divF, 'S7  WALL BETWEEN ROWS', `${ts}, make ${cntMark('S7')}, on the rail centre line` + (hl.length ? `, ${hl.length} x ${C.holeText(P.holes.middle)}` : ''), hl.length ? { holes: hl } : {}); }
   if (has('S3')) addInfill(ow, oh, G.divF, 'S3  DIVIDER', `${ts}, make ${cntMark('S3')}`, {});
-  if (has('S6')) { const hl = grid(ow, oh); addInfill(ow, oh, G.divF, 'S6  DIVIDER, AIR HOLES', `${ts}, make ${cntMark('S6')}, ${hl.length} x Ø${f0(P.holeD)} @ ${f0(P.holePitch)}`, { holes: hl }); }
+  if (has('S6')) { const hl = grid(ow, oh, P.holes.divider); addInfill(ow, oh, G.divF, 'S6  DIVIDER, AIR HOLES', `${ts}, make ${cntMark('S6')}, ${hl.length} x ${C.holeText(P.holes.divider)}`, { holes: hl }); }
   if (has('M1')) { const xs_ = C.wirePositions(bw, P).map(q => bw / 2 + q), zs_ = C.wirePositions(oh, P).map(q => oh / 2 + q); small.push([bw, oh, 'M1  MESH WALL', `make ${cntMark('M1')}, ${xs_.length} x ${zs_.length} wires`, { mesh: [xs_, zs_], fill: WHITE }]); }
   { const dw = G.doorW - 2 * A, dh = G.doorH - 2 * A; const xs_ = C.wirePositions(dw, P).map(q => dw / 2 + q), zs_ = C.wirePositions(dh, P).map(q => dh / 2 + q); small.push([dw, dh, 'M2  DOOR MESH', `make ${cntMark('M2')}, ${xs_.length} x ${zs_.length} wires`, { mesh: [xs_, zs_], fill: WHITE }]); }
-  // the sheet clamped between rows: full face, air holes in the bays, join-bolt holes in the top rail band
-  const plate = has('S8') ? (() => {
-    const holes = [];
-    if (P.wallMiddle === 'perforated') for (const [xa, xb] of G.bays) { const gg = C.holeGrid(xb - xa, oh, P); for (const du of gg.us) for (const dv of gg.vs) holes.push([xa + (xb - xa) / 2 + du, G.zFloor + oh / 2 + dv, P.holeD / 2]); }
+  // wide panels under the floor: the roof when it has holes, and the sheet clamped between rows
+  const wide = [];
+  const roofRows = S.bom.filter(r => r.mark === 'S2');
+  if (P.roofType === 'perforated' && roofRows.length) {
+    const sp = P.holes.roof, bh = D - 2 * A, holes = [];
+    for (const [xa, xb] of G.roofBays) for (const [du, dv] of C.holePattern(xb - xa, bh, sp)) holes.push([(xa + xb) / 2 + du, A + bh / 2 + dv, sp.d / 2]);
+    const r0 = roofRows[0], more = roofRows.slice(1).map(r => `${r.qty} x ${f0(r.size[0])} x ${f0(r.size[1])} for the middle rows, same holes, ends on the rail centre lines`);
+    wide.push({ w: r0.size[0], h: r0.size[1], holes, label: 'S2  ROOF, AIR HOLES',
+      sub: `${Number(P.tRoof).toFixed(1)} ${metalShort(P, 'sheet')}, make ${r0.qty}, ${holes.length} x ${C.holeText(sp)} over the open bays of the top frame` + (more.length ? `; ${more.join('; ')}` : '') + `. ${G.mixed ? 'Riveted to' : 'Sits on'} the top frame.` });
+  }
+  if (has('S8')) {
+    const holes = [], sp = P.holes.middle;
+    if (P.wallMiddle === 'perforated') for (const [xa, xb] of G.bays) for (const [du, dv] of C.holePattern(xb - xa, oh, sp)) holes.push([xa + (xb - xa) / 2 + du, G.zFloor + oh / 2 + dv, sp.d / 2]);
     const nAir = holes.length;
     if (G.bolted) for (const xb of [P.joinBoltInset, P.width - P.joinBoltInset]) holes.push([xb, P.height - h, 5.5]);
-    return { w: P.width, h: P.height + P.tRoof, holes, nAir };
-  })() : null;
+    wide.push({ w: P.width, h: P.height + P.tRoof, holes, label: 'S8  SHEET BETWEEN ROWS',
+      sub: `${ts}, make ${cntMark('S8')}, full face, clamped between the frames${nAir ? `, ${nAir} x ${C.holeText(sp)} in the bays` : ''}${G.bolted ? ', 2 x Ø11 for the join bolts' : ''}` });
+  }
   const S1TOP = 266;
-  const plateBlock = (sc) => plate ? 8 + plate.h / sc + 13 : 0;
+  const WIDE_W = PX1 - PX + 2;
+  const nLines = (sub, w) => s.wrap(sub, w, 5.5).length;
+  for (const wp of wide) wp.extra = 3.4 * (nLines(wp.sub, WIDE_W) - 1);
+  // each wide panel sits 32 under the one above (dimension, then its own label); the grid starts under the last
+  const gridTopFor = (sc) => { let bottom = S1TOP - FD / sc; for (const wp of wide) bottom -= 32 + wp.extra + wp.h / sc; return wide.length ? bottom - 13 : bottom - 24; };
   const layoutFor = (sc) => {
     if (P.width / sc > 124 || FD / sc > 46) return null;
-    const gridTop = S1TOP - FD / sc - 24 - plateBlock(sc);
+    const gridTop = gridTopFor(sc);
     const maxW = Math.max(...small.map(p => p[0] / sc)), colW = maxW + 17;
     if (maxW + 10 > PX1 - PX) return null;
     const cols = Math.max(1, Math.min(3, Math.floor((PX1 - PX - maxW - 10) / colW) + 1));
+    const subW = cols > 1 ? colW - 3 : WIDE_W;
     const rows = [];
-    small.forEach((p, i) => { const r = Math.floor(i / cols); rows[r] = Math.max(rows[r] || 0, p[1] / sc + 20); });
+    small.forEach((p, i) => { const r = Math.floor(i / cols); rows[r] = Math.max(rows[r] || 0, p[1] / sc + 20 + 3.4 * (nLines(p[3], subW) - 1)); });
     const total = rows.reduce((a, b) => a + b, 0);
     if (gridTop - total < PY0) return null;
-    return { sc, gridTop, colW, cols, rows };
+    return { sc, gridTop, colW, cols, rows, subW };
   };
   let lay = null;
   for (const sc of [15, 20, 25, 30, 40, 50, 75, 100]) { lay = layoutFor(sc); if (lay) break; }
-  if (!lay) lay = { sc: 100, gridTop: S1TOP - FD / 100 - 24 - plateBlock(100), colW: 40, cols: 3, rows: [] };
+  if (!lay) lay = { sc: 100, gridTop: gridTopFor(100), colW: 40, cols: 3, rows: [], subW: 37 };
   const k2 = 1 / lay.sc;
   s.text(PX, 278.6, `1:${lay.sc}. ` + (G.mixed ? 'Infills are folded trays riveted into the frame openings: flat blanks shown, fold up on the dashed lines.' : 'Nominal sizes of the frame openings: measure the welded frame and cut infills 1 to 2 under.'), { size: 6.0, color: GREY });
   s.text(PX, 275.4, G.mixed ? 'Make trays 1 to 2 under the measured openings. Air holes centred on the face. Weld every mesh wire end to the frame.' : 'Weld every mesh wire end to the frame. Laser or plasma cut air holes and deburr both sides.', { size: 6.0, color: GREY });
@@ -3698,32 +3862,36 @@ function pageDoors(doc, M, S, I, info) {
     for (const n of opt.notches || []) s.rect(x + n[0] * k2, y + n[1] * k2, n[2] * k2, n[3] * k2, { fill: WHITE, lw: 0 });
     for (const c of opt.holes || []) s.circle(x + c[0] * k2, y + c[1] * k2, Math.max(c[2] * k2, 0.3), { fill: WHITE, lw: 0.1 });
     if (opt.mesh) { for (const xx of opt.mesh[0]) s.line([x + xx * k2, x + xx * k2], [y, y + hh * k2], { lw: 0.08, color: GREY }); for (const zz of opt.mesh[1]) s.line([x, x + w * k2], [y + zz * k2, y + zz * k2], { lw: 0.08, color: GREY }); }
-    const top = y + hh * k2;
-    s.text(x, top + 5.6, label, { size: 6.6, weight: 'bold' });
-    s.text(x, top + 2.0, sub, { size: 5.5, color: GREY });
+    // label on top, subtitle lines under it (wrapped to the room given), then the blank
+    const top = y + hh * k2, lines = s.wrap(sub, opt.maxW || 200, 5.5);
+    lines.forEach((ln, i) => s.text(x, top + 2.0 + 3.4 * (lines.length - 1 - i), ln, { size: 5.5, color: GREY }));
+    s.text(x, top + 5.6 + 3.4 * (lines.length - 1), label, { size: 6.6, weight: 'bold' });
     return [w * k2, hh * k2];
   };
   const y1p = S1TOP - FD * k2;
   const floorWord = P.floorType === 'tread' ? `${Number(P.tFloor).toFixed(1)} ${metalShort(P, 'sheet')} tread plate` : `${Number(P.tFloor).toFixed(1)} ${metalShort(P, 'sheet')}`;
-  const wh = panel(PX, y1p, P.width, FD, `S1  FLOOR`, `${floorWord}, make ${cntMark('S1')}, notched ${f0(cn)} clear round the posts${G.shared ? ', ends on the rail centre lines' : ''}${fholes.length ? `, 4 x Ø${f0(G.trayBoltD + 1)} holes ${f0(G.trayBoltJoist)} in from the ends, ${f0(P.trayBoltInset - fy0)} from the long edges` : ''}`, { notches, holes: fholes });
+  const wh = panel(PX, y1p, P.width, FD, `S1  FLOOR`, `${floorWord}, make ${cntMark('S1')}, notched ${f0(cn)} clear round the posts${G.shared ? ', ends on the rail centre lines' : ''}${fholes.length ? `, 4 x Ø${f0(G.trayBoltD + 1)} holes ${f0(G.trayBoltJoist)} in from the ends, ${f0(P.trayBoltInset - fy0)} from the long edges` : ''}`, { notches, holes: fholes, maxW: 400 });
   s.dim([PX, y1p], [PX + wh[0], y1p], y1p - 5.5, 'h', f0(P.width), { size: 5.8 });
   s.dim([PX + wh[0], y1p], [PX + wh[0], y1p + wh[1]], PX + wh[0] + 5, 'v', f0(FD), { size: 5.8 });
-  s.text(PX, y1p - 13, 'S2  ROOF', { size: 6.6, weight: 'bold' });
-  const roofSizes = S.bom.filter(r => r.mark === 'S2').map(r => `${r.qty} x ${f0(r.size[0])} x ${f0(r.size[1])}`).join(' + ');
-  s.text(PX + s.tw('S2  ROOF', 6.6, 'bold') + 2.5, y1p - 13, `${Number(P.tRoof).toFixed(1)} ${metalShort(P, 'sheet')}: plain ${roofSizes}, no notches or holes. ${G.mixed ? 'Riveted to' : 'Sits on'} the top frame.`, { size: 5.5, color: GREY });
-  if (plate) {
-    const yTop = y1p - 24, ph = plate.h * k2;
-    const sub = `${ts}, make ${cntMark('S8')}, full face, clamped between the frames${plate.nAir ? `, ${plate.nAir} x Ø${f0(P.holeD)} in the bays` : ''}${G.bolted ? ', 2 x Ø11 for the join bolts' : ''}`;
-    panel(PX, yTop - 8 - ph, plate.w, plate.h, 'S8  SHEET BETWEEN ROWS', sub, { holes: plate.holes });
-    s.dim([PX, yTop - 8 - ph], [PX + plate.w * k2, yTop - 8 - ph], yTop - 8 - ph - 5.5, 'h', f0(plate.w), { size: 5.6 });
-    s.dim([PX + plate.w * k2, yTop - 8 - ph], [PX + plate.w * k2, yTop - 8], PX + plate.w * k2 + 4.5, 'v', f0(plate.h), { size: 5.6 });
+  if (P.roofType !== 'perforated') {
+    s.text(PX, y1p - 13, 'S2  ROOF', { size: 6.6, weight: 'bold' });
+    const roofSizes = roofRows.map(r => `${r.qty} x ${f0(r.size[0])} x ${f0(r.size[1])}`).join(' + ');
+    s.text(PX + s.tw('S2  ROOF', 6.6, 'bold') + 2.5, y1p - 13, `${Number(P.tRoof).toFixed(1)} ${metalShort(P, 'sheet')}: plain ${roofSizes}, no notches or holes. ${G.mixed ? 'Riveted to' : 'Sits on'} the top frame.`, { size: 5.5, color: GREY });
+  }
+  let bottom = y1p;
+  for (const wp of wide) {
+    const ph = wp.h * k2, y = bottom - 32 - wp.extra - ph;
+    panel(PX, y, wp.w, wp.h, wp.label, wp.sub, { holes: wp.holes, maxW: WIDE_W });
+    s.dim([PX, y], [PX + wp.w * k2, y], y - 5.5, 'h', f0(wp.w), { size: 5.6 });
+    s.dim([PX + wp.w * k2, y], [PX + wp.w * k2, y + ph], PX + wp.w * k2 + 4.5, 'v', f0(wp.h), { size: 5.6 });
+    bottom = y;
   }
   let rowTop = lay.gridTop;
   small.forEach(([w, hh, lab, sub, opt], i) => {
     const r = Math.floor(i / lay.cols), c = i % lay.cols;
     if (c === 0 && r > 0) rowTop -= lay.rows[r - 1];
-    const ph = hh * k2, x = PX + c * lay.colW, y = rowTop - 8 - ph;
-    panel(x, y, w, hh, lab, sub, opt);
+    const ph = hh * k2, x = PX + c * lay.colW, y = rowTop - 8 - 3.4 * (nLines(sub, lay.subW) - 1) - ph;
+    panel(x, y, w, hh, lab, sub, Object.assign({ maxW: lay.subW }, opt));
     s.dim([x, y], [x + w * k2, y], y - 5.5, 'h', f0(w), { size: 5.6 });
     s.dim([x + w * k2, y], [x + w * k2, y + ph], x + w * k2 + 4.5, 'v', f0(hh), { size: 5.6 });
   });
@@ -3759,22 +3927,31 @@ function p5Data(M, S) {
     S7: 'Wall between rows', S8: 'Sheet between rows', M1: 'Mesh wall', M2: 'Door mesh' };
   const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
   const sheetRows = [];
-  for (const m of ['S1', 'S2', 'S3', 'S6', 'S4', 'S5', 'S7', 'S8', 'M1', 'M2']) {
+  // where each wall-with-holes blank goes, when the faces have different arrangements (S5a, S5b, S5c)
+  const hp = C.holePlaces(P, G), s5where = {};
+  for (const k of ['front', 'middle', 'rear']) if (hp[k].used && hp[k].style === 'infill') s5where[hp[k].mark] = (s5where[hp[k].mark] ? s5where[hp[k].mark] + ' + ' : '') + k;
+  const order = ['S1', 'S2', 'S3', 'S6', 'S4', 'S5', 'S7', 'S8', 'M1', 'M2'];
+  const sheetMarks = [...new Set(b.filter(r => Array.isArray(r.size)).map(r => r.mark))]
+    .sort((x, y) => (order.indexOf(x.slice(0, 2)) - order.indexOf(y.slice(0, 2))) || x.localeCompare(y));
+  for (const m of sheetMarks) {
     for (const r of b.filter(x => x.mark === m)) {
       const mat = cap(matShortOf(r.material));
       const stockTxt = r.stock.startsWith('Weldmesh') ? `${mat} mesh ${r.stock.slice(9)}` : r.stock.startsWith('Tread') ? `${mat} tread ${r.stock.slice(12)}` : `${mat} sheet ${r.stock.slice(6)}`;
-      let note = r.tray ? `tray blank, ${f0(r.tray.f)} flanges${r.holes ? `, ${r.holes} x Ø${f0(P.holeD)} holes` : ''}` : r.holes ? `${r.holes} x Ø${f0(P.holeD)} holes each` : (r.note || '').replace('wall infill, ', '');
-      if (m === 'S8') note = `clamped, ${r.holes ? `${r.holes} x Ø${f0(P.holeD)} holes` : 'no air holes'}${G.bolted ? ', 2 x Ø11' : ''}`;
+      const d = r.place && P.holes[r.place] ? P.holes[r.place].d : 0;
+      let note = r.tray ? `tray blank, ${f0(r.tray.f)} flanges${r.holes ? `, ${r.holes} x Ø${f0(d)} holes` : ''}` : r.holes ? `${r.holes} x Ø${f0(d)} holes each` : (r.note || '').replace('wall infill, ', '');
+      if (m === 'S8') note = `clamped, ${r.holes ? `${r.holes} x Ø${f0(d)} holes` : 'no air holes'}${G.bolted ? ', 2 x Ø11' : ''}`;
       if (m === 'S1' && G.shared) note = 'ends on rail centre lines';
-      if (m === 'S2' && G.shared && N > 1) note = r.size[1] > P.depth - P.shs + 0.5 ? 'end rows' : 'middle rows';
-      sheetRows.push([m, sheetDesc[m], stockTxt, `${f0(r.size[0])} x ${f0(r.size[1])}`, r.qty, note]);
+      if (m === 'S2' && G.shared && N > 1) note = (r.size[1] > P.depth - P.shs + 0.5 ? 'end rows' : 'middle rows') + (r.holes ? `, ${r.holes} x Ø${f0(d)} holes` : '');
+      const desc = sheetDesc[m] || (m.startsWith('S5') ? `Wall with holes, ${s5where[m] || ''}` : m);
+      sheetRows.push([m, m === 'S2' && r.holes ? 'Roof with air holes' : desc, stockTxt, `${f0(r.size[0])} x ${f0(r.size[1])}`, r.qty, note]);
     }
   }
   // rivets where steel meets aluminium: floor and roof at 150, wall trays at 120, divider trays at 100
   let rivets = 0;
   if (G.mixed) {
     const bw = G.XC - G.h - G.A, per = (len, pitch) => Math.ceil(len / pitch);
-    rivets = 2 * per(2 * P.width + 3 * P.depth, 150) * N + q('S4') * per(2 * (bw + G.openH), 120) + q('S5') * per(2 * (bw + G.openH), 120)
+    const qS5 = b.filter(r => r.mark.startsWith('S5')).reduce((a, r) => a + r.qty, 0);
+    rivets = 2 * per(2 * P.width + 3 * P.depth, 150) * N + q('S4') * per(2 * (bw + G.openH), 120) + qS5 * per(2 * (bw + G.openH), 120)
       + (q('S3') + q('S6')) * per(2 * (G.openW + G.openH), 100) + q('S7') * per(2 * (bw + G.openH), 100);
     rivets = Math.ceil(rivets * 1.1 / 10) * 10;
   }
@@ -4015,9 +4192,9 @@ const LS_OLD = ['ute-dog-cage-builder.v1', 'ute-dog-cage-builder.sizes.v1']; // 
 const LS_VIEW = 'ute-dog-cage-builder.view.v1';    // viewer toggles
 const $ = (id) => document.getElementById(id);
 
-const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'trayGapSide', 'trayGapFront', 'trayGapRear', 'doorGap', 'holeD', 'holePitch', 'holeMargin',
+const NUM_FIELDS = ['width', 'depth', 'height', 'trayWidth', 'trayLength', 'trayGapSide', 'trayGapFront', 'trayGapRear', 'doorGap',
   'tSheet', 'tRoof', 'tFloor', 'joists', 'roofBars', 'meshPitch', 'meshWire', 'trayBoltInset', 'joinBoltInset', 'stockLength', 'sheetW', 'sheetH'];
-const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
+const SEL_FIELDS = ['wallFront', 'wallMiddle', 'wallRear', 'divider', 'roofType', 'shs', 'shsT', 'frameKind', 'sheetKind', 'floorType', 'rowJoin'];
 const CHK_FIELDS = ['trayBolts', 'joinBolts'];
 // sizes the page used for every material before aluminium got its own (used to spot old saved settings)
 const OLD_SIZES = { frame: { shs: 25, shsT: 2.0 }, sheet: { tSheet: 1.6, tRoof: 1.6, tFloor: 2.0 } };
@@ -4037,6 +4214,8 @@ function sanitize(obj) {
   for (let r = 0; r < out.rows; r++) { const x = hs[r] || {}; out.hinges.push({ L: x.L === 'front' || x.L === 'rear' ? x.L : out.defaultHinge, R: x.R === 'front' || x.R === 'rear' ? x.R : out.defaultHinge }); }
   for (const k of ['frameMat', 'sheetMat']) if (!['steel', 'aluminium'].includes(out[k])) out[k] = 'steel';
   out.lock = out.lock === 'cages' ? 'cages' : 'tray';
+  // hole arrangements per panel; older settings had one hole size and spacing for every panel
+  out.holes = C.normHoles(obj);
   return out;
 }
 const readLS = (k) => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (e) { return null; } };
@@ -4092,6 +4271,7 @@ function fillInputs() {
   $('rows-out').textContent = params.rows;
   matButtons();
   lockButtons();
+  fillHoles();
 }
 function matButtons() {
   document.querySelectorAll('[data-mat]').forEach(g => g.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(params[g.dataset.mat] === b.dataset.v))));
@@ -4113,6 +4293,79 @@ function readInputs() {
   for (const k of NUM_FIELDS) { const el = $(k); if (el && el.value !== '') { const v = parseFloat(el.value); if (isFinite(v)) params[k] = v; } }
   for (const k of SEL_FIELDS) { const el = $(k); if (el && el.value !== '') params[k] = (k === 'shs' || k === 'shsT') ? parseFloat(el.value) : el.value; }
   for (const k of CHK_FIELDS) { const el = $(k); if (el && !el.disabled) params[k] = el.checked; }
+  readHoles();
+}
+
+/* ---------------------------------------------------------------- air holes: one arrangement per panel */
+const HOLE_WHERE = { front: 'Front face', middle: 'Between rows', rear: 'Rear face', divider: 'Divider', roof: 'Roof' };
+const HOLE_TYPE_KEY = { front: 'wallFront', middle: 'wallMiddle', rear: 'wallRear', divider: 'divider', roof: 'roofType' };
+const H_FIELDS = { pattern: 'h-pattern', area: 'h-area', rows: 'h-rows', d: 'h-d', px: 'h-px', py: 'h-py', margin: 'h-margin' };
+let holePanel = 'middle';
+function holeSpec(k) {
+  if (!params.holes || typeof params.holes !== 'object') params.holes = {};
+  params.holes[k] = Object.assign({}, C.HOLE_DEFAULT, params.holes[k] || {});
+  return params.holes[k];
+}
+function fillHoles() {
+  const sp = holeSpec(holePanel);
+  for (const [k, id] of Object.entries(H_FIELDS)) $(id).value = String(sp[k]);
+  document.querySelectorAll('#hole-tabs [data-panel]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.panel === holePanel)));
+  holeView();
+}
+function readHoles() {
+  const sp = holeSpec(holePanel);
+  for (const [k, id] of Object.entries(H_FIELDS)) {
+    const el = $(id); if (!el || el.value === '') continue;
+    if (k === 'pattern' || k === 'area') sp[k] = el.value; else { const v = parseFloat(el.value); if (isFinite(v)) sp[k] = v; }
+  }
+}
+// which panels have holes, the fields that apply, and a drawing of the panel being set out
+function holeView() {
+  let P, G;
+  try { P = C.normParams(params); G = C.derived(P); } catch (e) { return; }
+  const used = C.holePlaces(P, G), sp = P.holes[holePanel], u = used[holePanel], roof = holePanel === 'roof';
+  document.querySelectorAll('#hole-tabs [data-panel]').forEach(b => b.classList.toggle('on', used[b.dataset.panel].used));
+  $('h-area-f').hidden = roof;
+  $('h-rows-f').hidden = roof || sp.area === 'all';
+  $('h-py-lab').textContent = roof ? 'Spacing along the ute' : 'Spacing up';
+  let txt, canUse = false;
+  if (holePanel === 'middle' && P.rows < 2) txt = 'Between rows: only with two or more rows.';
+  else if (u.used) txt = `${HOLE_WHERE[holePanel]}: ${u.panels} ${roof ? (u.panels === 1 ? 'sheet' : 'sheets') : (u.panels === 1 ? 'panel' : 'panels')} with these holes, mark ${u.mark}.`;
+  else { txt = `${HOLE_WHERE[holePanel]} is ${params[HOLE_TYPE_KEY[holePanel]] === 'mesh' ? 'weldmesh' : 'solid'}, so these holes are not used yet.`; canUse = true; }
+  $('hole-status').textContent = txt;
+  $('hole-use').hidden = !canUse;
+  drawHolePreview(P, G, sp, roof);
+}
+function drawHolePreview(P, G, sp, roof) {
+  // panel outline (u across, v up) and the areas the holes are set out in
+  let W, H, bays, members = [];
+  if (roof) {
+    W = P.width; H = P.depth;
+    bays = G.roofBays.map(([x0, x1]) => [x0, G.A, x1 - x0, H - 2 * G.A]);
+    const A = G.A, h = G.h;
+    members = [[0, 0, W, A], [0, H - A, W, A], [0, 0, A, H], [W - A, 0, A, H], [G.XC - h, 0, A, H]]
+      .concat(G.roofC.flatMap(c => [[c - h, 0, A, H], [W - c - h, 0, A, H]]));
+  } else {
+    W = holePanel === 'divider' ? G.openW : G.XC - G.h - G.A; H = G.openH;
+    bays = [[0, 0, W, H]];
+  }
+  let n = 0, area = 0, holes = '', borders = '';
+  for (const [x0, y0, w, h] of bays) {
+    area += w * h;
+    for (const [du, dv] of C.holePattern(w, h, sp)) { n++; holes += `<circle cx="${(x0 + w / 2 + du).toFixed(1)}" cy="${(H - (y0 + h / 2 + dv)).toFixed(1)}" r="${(sp.d / 2).toFixed(1)}"/>`; }
+    const m = sp.margin;
+    if (w > 2 * m && h > 2 * m) borders += `<rect x="${x0 + m}" y="${(H - y0 - h + m).toFixed(1)}" width="${(w - 2 * m).toFixed(1)}" height="${(h - 2 * m).toFixed(1)}"/>`;
+  }
+  const pad = Math.max(W, H) * 0.025;
+  const svg = $('hole-preview');
+  svg.setAttribute('viewBox', `${(-pad).toFixed(1)} ${(-pad).toFixed(1)} ${(W + 2 * pad).toFixed(1)} ${(H + 2 * pad).toFixed(1)}`);
+  svg.innerHTML = `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" style="fill:var(--sheet)"/>`
+    + members.map(([x, y, w, h]) => `<rect x="${x.toFixed(1)}" y="${(H - y - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:var(--muted);opacity:.28"/>`).join('')
+    + `<g style="fill:none;stroke:var(--muted);stroke-dasharray:4 3;opacity:.7" vector-effect="non-scaling-stroke">${borders.replace(/<rect /g, '<rect vector-effect="non-scaling-stroke" ')}</g>`
+    + `<g style="fill:var(--bg)">${holes}</g>`;
+  const open = area > 0 ? n * Math.PI * sp.d * sp.d / 4 / area * 100 : 0;
+  $('hole-count').textContent = (roof ? `Roof ${fmt(W)} x ${fmt(H)}, holes over the ${bays.length} open bays of the top frame (shaded bands are the frame under it): ` : `Panel ${fmt(W)} x ${fmt(H)}: `)
+    + `${n} ${n === 1 ? 'hole' : 'holes'}${roof ? '' : ' each'}, ${open.toFixed(1)}% open. Dashed line: plain border.`;
 }
 function hingeGrid() {
   const g = $('hinge-grid');
@@ -4154,6 +4407,9 @@ function syncInputs() {
   const P = C.normParams(params); // range clamps only; automatic moves (join bolts, hole spacing) stay as warnings
   for (const k of NUM_FIELDS) { const el = $(k); if (el && el.value !== '' && Math.abs(parseFloat(el.value) - P[k]) > 1e-9) el.value = P[k]; }
   for (const k of ['shs', 'shsT']) { const el = $(k); if (el && Math.abs(parseFloat(el.value) - P[k]) > 1e-9) { el.value = String(P[k]); if (el.value === '') el.value = String(params[k]); } }
+  // hole fields: show the clamped arrangement (e.g. spacing raised to keep 5 of metal between holes)
+  const sp = P.holes[holePanel];
+  for (const [k, id] of Object.entries(H_FIELDS)) { const el = $(id); if (el && String(sp[k]) !== el.value && !(k !== 'pattern' && k !== 'area' && Math.abs(parseFloat(el.value) - sp[k]) < 1e-9)) el.value = String(sp[k]); }
 }
 function fmt(v) { return Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1); }
 function rebuild(keepView) {
@@ -4168,6 +4424,7 @@ function rebuild(keepView) {
   if (syncPending) { syncPending = false; syncInputs(); }
   renderSummary();
   joinNotes();
+  holeView();
   $('hdr-layout').textContent = `${model.P.rows} x 2`;
   $('hdr-mat').textContent = { steel: 'Steel', aluminium: 'Aluminium', stainless: 'Stainless' }[C.metalOf(model.P, 'frame')];
   lastBuild = performance.now() - t0;
@@ -4210,7 +4467,10 @@ function renderSummary() {
     ['Sheet and mesh', `${nSheets()} ${sm === 'stainless' ? 'stainless' : sm}${nMesh ? ` + ${nMesh} mesh` : ''}`, `${fmt(P.sheetW)} x ${fmt(P.sheetH)} sheets, ${C.kindOf(P, 'sheet').grade}`],
   ];
   if (P.rows > 1) figs.push(['Between rows', `${fmt(G.betweenDogs)} mm`, C.ROW_JOINS[P.rowJoin].short]);
-  if (holes) figs.push(['Air holes', `${holes} x Ø${fmt(P.holeD)}`, `at ${fmt(P.holePitch)} mm`]);
+  if (holes) {
+    const used = C.holePlaces(P, G), sizes = [...new Set(C.HOLE_PANELS.filter(k => used[k].used).map(k => P.holes[k].d))].sort((a, b) => b - a);
+    figs.push(['Air holes', `${holes}`, `Ø${sizes.map(fmt).join(', Ø')} mm, ${C.HOLE_PANELS.filter(k => used[k].used).map(k => ({ front: 'front', middle: 'between rows', rear: 'rear', divider: 'dividers', roof: 'roof' })[k]).join(', ')}`]);
+  }
   $('figs').innerHTML = figs.map(([k, v, u]) => `<div class="fig"><div class="k">${k}</div><div class="v">${v} <small>${u}</small></div></div>`).join('');
   const w = s.warnings.filter(x => x.level !== 'info'), info = s.warnings.filter(x => x.level === 'info');
   const item = (x) => `<div class="warn ${x.level === 'bad' ? 'bad' : x.level === 'info' ? 'info' : ''}"><span>${x.text}</span></div>`;
@@ -4321,6 +4581,24 @@ function bind() {
   }));
   document.querySelectorAll('.lock').forEach(b => b.addEventListener('click', () => { params.lock = b.dataset.lock; lockButtons(); save(); }));
   $('fit').addEventListener('click', fit);
+  // air holes: pick a panel, edit its arrangement (the drawing updates as you type)
+  $('hole-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-panel]'); if (!b || b.dataset.panel === holePanel) return;
+    readHoles(); holePanel = b.dataset.panel; fillHoles();
+  });
+  for (const id of Object.values(H_FIELDS)) $(id).addEventListener('input', () => { readHoles(); holeView(); });
+  $('hole-use').addEventListener('click', () => {
+    readInputs(); // keep edits that haven't been rebuilt yet
+    params[HOLE_TYPE_KEY[holePanel]] = 'perforated';
+    fillInputs(); schedule(true);
+  });
+  $('h-copy').addEventListener('click', () => {
+    readHoles();
+    const src = Object.assign({}, holeSpec(holePanel));
+    for (const k of C.HOLE_PANELS) if (k !== holePanel) params.holes[k] = Object.assign({}, src);
+    holeView(); schedule(true);
+    status(`${HOLE_WHERE[holePanel]} hole arrangement copied to every panel` + (holePanel !== 'roof' && src.area !== 'all' ? ' (the roof always uses the whole panel).' : '.'));
+  });
   $('hinge-all-rear').addEventListener('click', () => { params.defaultHinge = 'rear'; params.hinges = params.hinges.map(() => ({ L: 'rear', R: 'rear' })); hingeGrid(); schedule(true); });
   $('hinge-all-front').addEventListener('click', () => { params.defaultHinge = 'front'; params.hinges = params.hinges.map(() => ({ L: 'front', R: 'front' })); hingeGrid(); schedule(true); });
   document.querySelectorAll('.tools [data-view]').forEach(b => b.addEventListener('click', () => {
@@ -4365,6 +4643,10 @@ function bind() {
 }
 
 function start() {
+  { // start on a panel that has holes
+    const P = C.normParams(params), used = C.holePlaces(P, C.derived(P));
+    holePanel = ['middle', 'front', 'rear', 'divider', 'roof'].find(k => used[k].used) || 'middle';
+  }
   fillInputs();
   hingeGrid();
   try { viewer = new V.Viewer($('viewer')); viewer.onOrient = (t) => { $('front-tag').textContent = t; }; }
